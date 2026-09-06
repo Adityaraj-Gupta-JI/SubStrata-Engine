@@ -1,26 +1,38 @@
+import os
 import psycopg2
-from psycopg2.pool import ThreadedConnectionPool
+from psycopg2 import pool
 from contextlib import contextmanager
-from app.config import settings
+import logging
 
-# Threaded connection pool for high-concurrency agent workflows
-pool = ThreadedConnectionPool(
-    minconn=1,
-    maxconn=20,
-    user=settings.POSTGRES_USER,
-    password=settings.POSTGRES_PASSWORD,
-    host=settings.POSTGRES_HOST,
-    port=settings.POSTGRES_PORT,
-    database=settings.POSTGRES_DB
-)
+logger = logging.getLogger(__name__)
+
+DB_URL = os.getenv("DATABASE_URL", "postgresql://postgres:postgres@localhost:5432/substrata_db")
+
+try:
+    db_pool = psycopg2.pool.ThreadedConnectionPool(minconn=1, maxconn=10, dsn=DB_URL)
+except Exception as e:
+    logger.error(f"Failed to initialize database connection pool: {e}")
+    db_pool = None
 
 @contextmanager
 def get_db_connection(tenant_id: str = None):
-    conn = pool.getconn()
+    if not db_pool:
+        raise RuntimeError("Database pool is not initialized.")
+    conn = db_pool.getconn()
     try:
         if tenant_id:
             with conn.cursor() as cursor:
-                cursor.execute("SET LOCAL app.current_tenant_id = %s;", (tenant_id,))
+                cursor.execute("SELECT set_config('app.current_tenant', %s, false);", (tenant_id,))
         yield conn
     finally:
-        pool.putconn(conn)
+        db_pool.putconn(conn)
+
+def check_db_health() -> bool:
+    try:
+        with get_db_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute("SELECT 1;")
+                return cur.fetchone()[0] == 1
+    except Exception as e:
+        logger.error(f"Database Health Check Failed: {e}")
+        return False
