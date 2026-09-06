@@ -1,22 +1,28 @@
-# Python
+# Python & Environment
+venv/
+.venv/
+.env
+*.env
 __pycache__/
 *.py[cod]
 *$py.class
-venv/
-.venv/
-*.env
+.pytest_cache/
 
-# IDE
-.vscode/
-.idea/
-
-# Database / Storage
+# Database & Storage
 *.sqldb
 qdrant_storage/
 postgres_data/
 
-# Node / React
+# Node & Next.js Frontend
 node_modules/
 dist/
 build/
+frontend/node_modules/
+frontend/.next/
+frontend/out/
+
+# IDE & OS
+.vscode/
+.idea/
 .DS_Store
+*.log
