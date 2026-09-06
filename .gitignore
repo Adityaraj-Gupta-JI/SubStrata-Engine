@@ -1,0 +1,22 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+venv/
+.venv/
+*.env
+
+# IDE
+.vscode/
+.idea/
+
+# Database / Storage
+*.sqldb
+qdrant_storage/
+postgres_data/
+
+# Node / React
+node_modules/
+dist/
+build/
+.DS_Store
