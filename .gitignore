@@ -26,3 +26,5 @@ frontend/out/
 .idea/
 .DS_Store
 *.log
+
+backend/.env

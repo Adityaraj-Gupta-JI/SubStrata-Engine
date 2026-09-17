@@ -1,46 +1,29 @@
-from fastapi import FastAPI, HTTPException, Header
-from pydantic import BaseModel
-from langchain_core.messages import HumanMessage
-from app.database.connection import check_db_health
-from app.agents.llm import verify_user_api_key
-from app.agents.graph import run_agent_workflow
-from app.tools.db_tools import query_eav_data, upsert_eav_entity
+from fastapi import FastAPI, Depends
+from fastapi.middleware.cors import CORSMiddleware
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import text
 
-app = FastAPI(title="SubStrata Engine API", version="0.1.0")
+from app.routers import api
+from app.database.connection import get_db
 
-class ChatRequest(BaseModel):
-    message: str
-    tenant_id: str
+app = FastAPI(title="SubStrata Engine Core API", version="1.0.0")
 
-class KeyVerifyRequest(BaseModel):
-    api_key: str
+# Enable CORS for Next.js web client
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://localhost:3000", "http://localhost:3001", "*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+app.include_router(api.router, prefix="/api/v1")
 
 @app.get("/health/db")
-def db_health():
-    if not check_db_health():
-        raise HTTPException(status_code=503, detail="Database connection failed.")
-    return {"status": "ok", "database": "connected"}
-
-@app.post("/api/v1/verify-key")
-def verify_key(payload: KeyVerifyRequest):
-    if not verify_user_api_key(payload.api_key):
-        raise HTTPException(status_code=400, detail="Invalid API Key or quota exceeded.")
-    return {"status": "valid", "message": "API key verified successfully."}
-
-@app.post("/api/v1/chat")
-def chat_endpoint(
-    payload: ChatRequest,
-    x_openrouter_api_key: str = Header(..., alias="X-OpenRouter-API-Key")
-):
+async def health_check(db: AsyncSession = Depends(get_db)):
+    """Health check endpoint to verify database connectivity."""
     try:
-        registered_tools = [query_eav_data, upsert_eav_entity]
-        
-        reply = run_agent_workflow(
-            messages=[HumanMessage(content=payload.message)],
-            tenant_id=payload.tenant_id,
-            api_key=x_openrouter_api_key,
-            tools=registered_tools
-        )
-        return {"status": "success", "tenant_id": payload.tenant_id, "reply": reply}
+        await db.execute(text("SELECT 1"))
+        return {"status": "online", "database": "connected"}
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        return {"status": "offline", "error": str(e)}
