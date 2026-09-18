@@ -311,9 +311,9 @@ Open **http://localhost:3000** (or `:3001`).
 
 | Member | Role | Primary Contribution |
 |---|---|---|
-| **Member 1** | **Backend Systems & Database Infrastructure Engineer** | Designed and implemented the backend services, PostgreSQL EAV persistence layer, asynchronous database runtime, and database connectivity workflow. |
-| **Member 2** | **Frontend Architecture & User Experience Engineer** | Designed and implemented the frontend dashboard, query-terminal experience, model-selection interface, and live EAV inspection workflow. |
-| **Member 3** | **Full-Stack Integration & AI Systems Engineer** | Integrated the frontend, backend, OpenRouter-based agentic workflow, tenant context, SQL execution path, and database routing components. |
+| **Adityaraj Gupta** | **Backend Systems & Database Infrastructure Engineer** | Designed and implemented the backend services, PostgreSQL EAV persistence layer, asynchronous database runtime, and database connectivity workflow. |
+| **A. N. Yashas Kiran** | **Frontend Architecture & User Experience Engineer** | Designed and implemented the frontend dashboard, query-terminal experience, model-selection interface, and live EAV inspection workflow. |
+| **Krishna Agrawal** | **Full-Stack Integration & AI Systems Engineer** | Integrated the frontend, backend, OpenRouter-based agentic workflow, tenant context, SQL execution path, and database routing components. |
 
 ## 📚 Technical References
 
