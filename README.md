@@ -69,9 +69,9 @@ Existing tooling forces a trade-off between **static rigidity** (traditional RDB
 
 SubStrata resolves this with three mechanisms:
 
-- **Dynamic EAV persistence pipeline** — entity schemas stored via normalized `entities` / `attributes` / `entity_values` tables, eliminating runtime migrations.
-- **Strict tenant scoping** — every natural-language query and SQL execution is bound to an immutable `tenant_id` context.
-- **BYOK + BYODB federated runtime** — users supply OpenRouter credentials and pick between SubStrata's managed instance or their own external database.
+- ** Dynamic EAV persistence pipeline ** — entity schemas stored via normalized `entities` / `attributes` / `entity_values` tables, eliminating runtime migrations.
+- ** Strict tenant scoping ** — every natural-language query and SQL execution is bound to an immutable `tenant_id` context.
+- ** BYOK + BYODB federated runtime ** — users supply OpenRouter credentials and pick between SubStrata's managed instance or their own external database.
 
 It functions as **a deterministic execution boundary around LLM output** — the model reasons freely, but nothing reaches Postgres without passing through validation, tenant scoping, and SSRF checks.
 
