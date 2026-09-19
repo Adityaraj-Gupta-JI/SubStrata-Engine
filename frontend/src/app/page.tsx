@@ -46,20 +46,20 @@ export default function SubStrataDashboard() {
   const [isProcessing, setIsProcessing] = useState(false);
   const chatEndRef = useRef<HTMLDivElement>(null);
 
-  useEffect(() => {
-    setIsMounted(true);
-    setMessages([
-      {
-        id: "1",
-        sender: "agent",
-        text: "SubStrata Engine v0.1 Online. Select model, paste API key, and submit entity requests.",
-        timestamp: new Date().toLocaleTimeString(),
-      },
-    ]);
-
-    fetchModels();
-    checkHealth();
-  }, []);
+// Ensure timestamps only generate on the client side
+useEffect(() => {
+  setIsMounted(true);
+  setMessages([
+    {
+      id: "1",
+      sender: "agent",
+      text: "SubStrata Engine v0.1 Online. Select model, paste API key, and submit entity requests.",
+      timestamp: new Date().toLocaleTimeString(),
+    },
+  ]);
+  fetchModels();
+  checkHealth();
+}, []);
 
   useEffect(() => {
     if (postgresStatus === "online") {
@@ -261,7 +261,7 @@ export default function SubStrataDashboard() {
               {isVerifying ? "VERIFYING..." : isKeySaved ? "SAVED" : "SAVE"}
             </button>
             {isKeySaved && <CheckCircle2 className="w-5 h-5 text-green-500" />}
-            {keyError && <AlertCircle className="w-5 h-5 text-red-500" title={keyError} />}
+            {keyError && (<span title={keyError}><AlertCircle className="w-5 h-5 text-red-500" /></span>)}
           </div>
         </div>
 
