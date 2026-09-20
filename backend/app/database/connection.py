@@ -2,13 +2,18 @@ import os
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession, async_sessionmaker
 from sqlalchemy.orm import declarative_base
 
-# Default to local PostgreSQL instance with asyncpg driver
-DATABASE_URL = os.getenv(
+raw_database_url = os.getenv(
     "DATABASE_URL", 
     "postgresql+asyncpg://postgres:postgres@localhost:5432/substrata_db"
 )
 
-# Async engine configuration with pre-ping validation
+# Ensure asyncpg driver dialect prefix is present
+if raw_database_url.startswith("postgresql://"):
+    DATABASE_URL = raw_database_url.replace("postgresql://", "postgresql+asyncpg://", 1)
+else:
+    DATABASE_URL = raw_database_url
+
+# Async engine configuration
 engine = create_async_engine(
     DATABASE_URL, 
     echo=False, 
