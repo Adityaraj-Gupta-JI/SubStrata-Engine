@@ -28,3 +28,7 @@ frontend/out/
 *.log
 
 backend/.env
+
+# Cloudflare / OpenNext build artifacts
+.open-next
+.wrangler
