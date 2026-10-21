@@ -1,0 +1,17 @@
+import Link from "next/link";
+import { RouteShell } from "@/components/RouteShell";
+
+const cards = [
+  { title: "AI chat", href: "/ai-chat", note: "Existing OpenRouter chat and local EAV demo" },
+  { title: "Databases", href: "/databases", note: "Connections not available yet" },
+  { title: "SQL editor", href: "/sql-editor", note: "Execution gateway not connected" },
+  { title: "Explorer", href: "/explorer", note: "Database discovery not connected" },
+];
+
+export default function DashboardPage() {
+  return <RouteShell title="Dashboard" description="Your SubStrata workspace. Hosted accounts and database connections are not connected yet.">
+    <div className="grid gap-4 sm:grid-cols-2">{cards.map(card => <Link key={card.href} href={card.href} className="rounded-xl border border-[#2a3047] bg-[#0d0e17] p-5 hover:border-[#ff0055]">
+      <h2 className="font-bold text-[#00f0ff]">{card.title}</h2><p className="mt-2 text-sm text-[#8b9bb4]">{card.note}</p>
+    </Link>)}</div>
+  </RouteShell>;
+}

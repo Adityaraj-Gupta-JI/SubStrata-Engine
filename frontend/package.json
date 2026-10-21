@@ -4,9 +4,10 @@
   "private": true,
   "scripts": {
   "dev": "next dev",
-  "build": "next build",
+  "build": "next build --webpack",
   "start": "next start",
-  "lint": "next lint",
+  "lint": "eslint src",
+  "typecheck": "tsc --noEmit",
   "build:worker": "open-next-cloudflare build",
   "preview:worker": "wrangler dev",
   "deploy:worker": "open-next-cloudflare build && wrangler deploy"
