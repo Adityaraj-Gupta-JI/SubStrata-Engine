@@ -14,6 +14,14 @@ Required Worker bindings and secrets (names only):
 - `FRONTEND_ORIGIN`: exact permitted frontend origin and Clerk authorized party
 - `CLERK_AUDIENCE`: optional expected token audience
 
+### Audience policy
+
+`CLERK_AUDIENCE` remains optional in every environment; no environment-specific requirement is currently declared. Unset (`undefined`) means no audience restriction. When set, it is one exact, case-sensitive audience identifier, with no whitespace or control characters. Empty, null, non-string, whitespace-containing, or control-containing configuration fails closed with a generic 503. No comma-separated or JSON allowlist is parsed: a configured string is always treated as a single literal identifier.
+
+After Clerk signature verification and the issuer, expiry, activation, and session checks succeed, a configured audience must match the verified token's string `aud`, or occur in a nonempty array of nonempty strings. Missing, null, empty, mixed-type, and mismatched claims return a generic 401. Identity is returned only after these checks. The Worker independently enforces this rule because the installed Clerk SDK does not enforce missing and array-valued audiences reliably.
+
+`test/auth-audience.test.ts` uses the installed Clerk SDK with ephemeral local RSA keys and no Clerk network calls. These regression tests do not replace a live Clerk-to-Worker integration test.
+
 Frontend configuration (names only): `NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY`, `CLERK_SECRET_KEY`, `NEXT_PUBLIC_PLATFORM_API_URL`, and, only for legacy chat, `NEXT_PUBLIC_LEGACY_API_URL`. Configure Clerk redirect URLs for `/login` and `/register` in the application's Clerk settings. The platform API requires a Clerk session token in the `Authorization: Bearer` header. A Clerk application is not configured in this repository; live token verification requires a configured application and a separate integration test.
 
 Run `npm run typecheck`, `npm test`, and `npm run build` in this package. `build` performs a Wrangler dry run and writes only local `dist/` output; it does not publish a Worker. The current migration was validated against a disposable local D1 database as well as SQLite constraint tests.

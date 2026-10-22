@@ -32,7 +32,7 @@ function request(path: string, token?: string, method = "GET", body?: object): R
 }
 
 function claims(overrides: Record<string, unknown> = {}) {
-  return { sub: "clerk-user-A", sid: "session-A", iss: clerkIssuer, exp: Math.floor(Date.now() / 1000) + 300, ...overrides };
+  return { sub: "clerk-user-A", sid: "session-A", iss: clerkIssuer, exp: Math.floor(Date.now() / 1000) + 300, aud: "test-audience", ...overrides };
 }
 
 describe("Clerk session verification contract", () => {
