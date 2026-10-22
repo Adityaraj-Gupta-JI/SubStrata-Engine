@@ -1,0 +1,18 @@
+{
+  "name": "substrata-api",
+  "main": "src/index.ts",
+  "account_id": null,
+  "workers_dev": false,
+  "compatibility_date": "2026-10-22",
+  "compatibility_flags": ["nodejs_compat"],
+  "d1_databases": [{
+    "binding": "METADATA",
+    "database_name": null,
+    "database_id": null,
+    "migrations_dir": "migrations"
+  }],
+  "vars": {
+    "CLERK_ISSUER": null,
+    "FRONTEND_ORIGIN": null
+  }
+}

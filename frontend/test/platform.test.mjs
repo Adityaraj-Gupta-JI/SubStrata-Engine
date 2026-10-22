@@ -1,13 +1,71 @@
 import { afterEach, test } from "node:test";
 import assert from "node:assert/strict";
-import { platformGet, PlatformApiError } from "../src/lib/api/platform.ts";
+import { platformGet, platformPost, platformToken, PlatformApiError } from "../src/lib/api/platform.ts";
 
 const previousBase = process.env.NEXT_PUBLIC_PLATFORM_API_URL;
 const previousFetch = globalThis.fetch;
+const previousTemplate = process.env.NEXT_PUBLIC_CLERK_JWT_TEMPLATE;
+const previousMode = process.env.NODE_ENV;
 afterEach(() => {
   if (previousBase === undefined) delete process.env.NEXT_PUBLIC_PLATFORM_API_URL;
   else process.env.NEXT_PUBLIC_PLATFORM_API_URL = previousBase;
   globalThis.fetch = previousFetch;
+  if (previousTemplate === undefined) delete process.env.NEXT_PUBLIC_CLERK_JWT_TEMPLATE;
+  else process.env.NEXT_PUBLIC_CLERK_JWT_TEMPLATE = previousTemplate;
+  if (previousMode === undefined) delete process.env.NODE_ENV;
+  else process.env.NODE_ENV = previousMode;
+});
+
+test("uses standard Clerk sessions unless a template is explicitly configured", async () => {
+  delete process.env.NEXT_PUBLIC_CLERK_JWT_TEMPLATE;
+  assert.equal(await platformToken(async options => { assert.equal(options, undefined); return "standard-session"; }), "standard-session");
+  process.env.NEXT_PUBLIC_CLERK_JWT_TEMPLATE = "substrata-api";
+  assert.equal(await platformToken(async options => { assert.deepEqual(options, { template: "substrata-api" }); return "template-session"; }), "template-session");
+});
+
+test("rejects unavailable tokens and malformed template configuration", async () => {
+  delete process.env.NEXT_PUBLIC_CLERK_JWT_TEMPLATE;
+  await assert.rejects(platformToken(async () => null), error => error instanceof PlatformApiError && error.status === 401);
+  process.env.NEXT_PUBLIC_CLERK_JWT_TEMPLATE = " ";
+  await assert.rejects(platformToken(async () => { throw new Error("must not run"); }), error => error instanceof PlatformApiError && error.status === 503);
+});
+
+test("permits HTTP loopback only during local development", async () => {
+  process.env.NEXT_PUBLIC_PLATFORM_API_URL = "http://localhost:8787";
+  globalThis.fetch = async () => new Response(JSON.stringify({ data: [] }));
+  process.env.NODE_ENV = "development";
+  await platformGet("/organizations", "session");
+  process.env.NODE_ENV = "production";
+  await assert.rejects(platformGet("/organizations", "session"), error => error instanceof PlatformApiError && error.code === "NOT_CONFIGURED");
+});
+
+test("rejects credential-bearing, insecure, and non-origin API URLs", async () => {
+  process.env.NODE_ENV = "production";
+  globalThis.fetch = async () => { throw new Error("must not send a token"); };
+  for (const base of ["http://api.example.test", "https://localhost", "https://name:password@api.example.test", "https://api.example.test/path", "https://api.example.test?query=1"]) {
+    process.env.NEXT_PUBLIC_PLATFORM_API_URL = base;
+    await assert.rejects(platformGet("/organizations", "session"), error => error instanceof PlatformApiError && error.code === "NOT_CONFIGURED");
+  }
+});
+
+test("posts metadata to the real API contract and returns only its response", async () => {
+  process.env.NEXT_PUBLIC_PLATFORM_API_URL = "https://api.example.test";
+  globalThis.fetch = async (url, options) => {
+    assert.equal(url, "https://api.example.test/api/v1/organizations");
+    assert.equal(options.method, "POST");
+    assert.equal(options.headers.Authorization, "Bearer session");
+    assert.deepEqual(JSON.parse(options.body), { name: "Test", slug: "test" });
+    return new Response(JSON.stringify({ data: { id: "persisted-id" } }), { status: 201 });
+  };
+  assert.deepEqual(await platformPost("/organizations", "session", { name: "Test", slug: "test" }), { data: { id: "persisted-id" } });
+});
+
+test("controls network and non-JSON errors without echoing transport details", async () => {
+  process.env.NEXT_PUBLIC_PLATFORM_API_URL = "https://api.example.test";
+  globalThis.fetch = async () => { throw new Error("PRIVATE_SENTINEL"); };
+  await assert.rejects(platformGet("/auth/session", "session"), error => error.code === "NETWORK_ERROR" && !error.message.includes("PRIVATE_SENTINEL"));
+  globalThis.fetch = async () => new Response("not-json", { status: 502 });
+  await assert.rejects(platformGet("/auth/session", "session"), error => error.code === "API_ERROR" && error.status === 502);
 });
 
 test("requires a configured platform API instead of silently using localhost", async () => {

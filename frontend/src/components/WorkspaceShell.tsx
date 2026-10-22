@@ -3,8 +3,8 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useAuth, UserButton } from "@clerk/nextjs";
-import { useEffect, useState, type ReactNode } from "react";
-import { platformGet, type Organization, type Page, type Session, type Workspace } from "@/lib/api/platform";
+import { useEffect, useState, type FormEvent, type ReactNode } from "react";
+import { platformGet, platformPost, platformToken, type Organization, type Page, type Session, type Workspace } from "@/lib/api/platform";
 
 const groups = [
   { label: "Workspace", links: [["Dashboard", "/dashboard"], ["AI chat", "/ai-chat"], ["Databases", "/databases"], ["SQL editor", "/sql-editor"], ["Explorer", "/explorer"], ["Agent runs", "/agent-runs"]] },
@@ -20,14 +20,15 @@ export function WorkspaceShell({ children }: { children: ReactNode }) {
   const [organizationId, setOrganizationId] = useState("");
   const [workspaceId, setWorkspaceId] = useState("");
   const [status, setStatus] = useState("Loading session…");
+  const [create, setCreate] = useState<"organization" | "workspace" | null>(null);
+  const [saving, setSaving] = useState(false);
 
   useEffect(() => {
     if (!isLoaded || !isSignedIn) return;
     let cancelled = false;
     void (async () => {
       try {
-        const token = await getToken();
-        if (!token) throw new Error("Session token unavailable.");
+        const token = await platformToken(getToken);
         await platformGet<Session>("/auth/session", token);
         const result = await platformGet<Page<Organization>>("/organizations", token);
         if (cancelled) return;
@@ -46,8 +47,7 @@ export function WorkspaceShell({ children }: { children: ReactNode }) {
     let cancelled = false;
     void (async () => {
       try {
-        const token = await getToken();
-        if (!token) throw new Error("Session token unavailable.");
+        const token = await platformToken(getToken);
         const result = await platformGet<Page<Workspace>>(`/organizations/${organizationId}/workspaces`, token);
         if (cancelled) return;
         setWorkspaces(result.data);
@@ -59,6 +59,33 @@ export function WorkspaceShell({ children }: { children: ReactNode }) {
     })();
     return () => { cancelled = true; };
   }, [getToken, organizationId, isSignedIn]);
+
+  async function createMetadata(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!create || saving || (create === "workspace" && !organizationId)) return;
+    const form = new FormData(event.currentTarget);
+    const payload = { name: String(form.get("name") ?? ""), slug: String(form.get("slug") ?? "") };
+    setSaving(true);
+    setStatus("Saving metadata…");
+    try {
+      const token = await platformToken(getToken);
+      if (create === "organization") {
+        const result = await platformPost<{ data: Organization }>("/organizations", token, payload);
+        setOrganizations(previous => [result.data, ...previous]);
+        setWorkspaces([]);
+        setWorkspaceId("");
+        setOrganizationId(result.data.id);
+      } else {
+        const result = await platformPost<{ data: Workspace }>(`/organizations/${organizationId}/workspaces`, token, payload);
+        setWorkspaces(previous => [result.data, ...previous]);
+        setWorkspaceId(result.data.id);
+      }
+      setCreate(null);
+      setStatus("");
+    } catch (error) {
+      setStatus(error instanceof Error ? error.message : "Metadata could not be saved.");
+    } finally { setSaving(false); }
+  }
   return (
     <div className="min-h-screen bg-[#07080c] text-[#e0e6ed] lg:flex">
       <a href="#main-content" className="sr-only focus:not-sr-only focus:absolute focus:z-50 focus:bg-white focus:p-3 focus:text-black">Skip to content</a>
@@ -70,10 +97,21 @@ export function WorkspaceShell({ children }: { children: ReactNode }) {
         <Link href="/dashboard" className="hidden text-xl font-black tracking-wider text-[#ff0055] lg:block">SUBSTRATA</Link>
         <div className="mt-5 space-y-2 rounded border border-[#2a3047] bg-[#131522] p-3 text-xs">
           <label className="block text-[#8b9bb4]" htmlFor="organization-select">ORGANIZATION</label>
-          <select id="organization-select" value={organizationId} onChange={event => { setOrganizationId(event.target.value); setWorkspaceId(""); setWorkspaces([]); }} className="w-full bg-[#0d0e17] p-2 text-white" disabled={!organizations.length}>
+          <select id="organization-select" value={organizationId} onChange={event => { setOrganizationId(event.target.value); setWorkspaceId(""); setWorkspaces([]); setStatus("Loading workspaces…"); }} className="w-full bg-[#0d0e17] p-2 text-white" disabled={!organizations.length || saving}>
             {!organizations.length && <option value="">None available</option>}
             {organizations.map(org => <option key={org.id} value={org.id}>{org.name}</option>)}
           </select>
+          <div className="flex flex-wrap gap-2">
+            <button type="button" className="underline" disabled={!isSignedIn || saving} onClick={() => setCreate("organization")}>New organization</button>
+            <button type="button" className="underline" disabled={!organizationId || saving} onClick={() => setCreate("workspace")}>New workspace</button>
+          </div>
+          {create && <form onSubmit={createMetadata} className="space-y-2">
+            <p>Create {create}. Workspace creation requires an owner or admin.</p>
+            <label className="block">Name<input name="name" required minLength={2} maxLength={100} disabled={saving} className="mt-1 w-full bg-[#0d0e17] p-2" /></label>
+            <label className="block">Slug<input name="slug" required maxLength={63} pattern="[a-z0-9]+(-[a-z0-9]+)*" disabled={saving} className="mt-1 w-full bg-[#0d0e17] p-2" /></label>
+            <button type="submit" disabled={saving} className="mr-3 underline">{saving ? "Saving…" : "Create"}</button>
+            <button type="button" disabled={saving} onClick={() => setCreate(null)} className="underline">Cancel</button>
+          </form>}
           <label className="block text-[#8b9bb4]" htmlFor="workspace-select">WORKSPACE</label>
           <select id="workspace-select" value={workspaceId} onChange={event => setWorkspaceId(event.target.value)} className="w-full bg-[#0d0e17] p-2 text-white" disabled={!workspaces.length}>
             {!workspaces.length && <option value="">None available</option>}

@@ -3,6 +3,9 @@ venv/
 .venv/
 .env
 .env.*
+.dev.vars
+.dev.vars.*
+wrangler.deploy.json
 *.env
 __pycache__/
 *.py[cod]

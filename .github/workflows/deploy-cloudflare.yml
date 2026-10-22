@@ -1,33 +1,54 @@
-name: Deploy Frontend to Cloudflare Pages
+name: Cloudflare readiness checks (manual only)
 
 on:
-  push:
-    branches:
-      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  NEXT_TELEMETRY_DISABLED: '1'
+  WRANGLER_SEND_METRICS: 'false'
 
 jobs:
-  deploy:
+  frontend-worker:
     runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
     steps:
-      - name: Checkout Code
-        uses: actions/checkout@v4
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
         with:
-          node-version: 20
-          cache: 'npm'
+          node-version: 24
+          cache: npm
           cache-dependency-path: frontend/package-lock.json
+      - run: npm ci
+      - run: npm test
+      - run: npm run lint
+      - run: npm run build
+      - run: npm run typecheck
+      - run: npm run build:worker
+      - run: npm exec --offline -- wrangler deploy --dry-run --outdir .wrangler/readiness
 
-      - name: Install Dependencies & Export Static Site
-        run: |
-          cd frontend
-          npm ci
-          npm run build
-
-      - name: Deploy to Cloudflare Pages via Wrangler
-        uses: cloudflare/wrangler-action@v3
+  api-worker:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: worker
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
         with:
-          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          command: pages deploy frontend/out --project-name=substrata-engine
+          node-version: 24
+          cache: npm
+          cache-dependency-path: worker/package-lock.json
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm test
+      - run: npm run migrate:local
+      - run: npm run build
+
+# Packaging validation only: no deployment, remote migration or provisioning.
+# Hosted builds must supply a real public Clerk key and HTTPS API origin.
+# Unconfigured CI output must never be deployed.

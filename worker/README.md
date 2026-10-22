@@ -4,7 +4,7 @@ This package is the Cloudflare Worker API for platform metadata. It does not exe
 
 ## Local setup
 
-Install dependencies in `worker/` and configure a **local/disposable** D1 database binding named `METADATA`. Replace the placeholder `database_id` in `wrangler.jsonc` only when configuring an actual environment. Never commit credentials or production database identifiers. Apply migrations locally with `npm run migrate:local`; do not use `--remote` for checkpoint validation.
+Install dependencies in `worker/`. The `METADATA` binding is local by default and has no fabricated cloud database ID. Apply migrations with `npm run migrate:local`, then start `npm run dev`; both use `.wrangler/r3-local`. Do not use `--remote` for checkpoint validation. Hosting requires real owner-provided identifiers through a separate configuration; see `../docs/platform-readiness.md` and the intentionally incomplete `wrangler.deploy.example.json` template.
 
 Required Worker bindings and secrets (names only):
 
@@ -22,7 +22,7 @@ After Clerk signature verification and the issuer, expiry, activation, and sessi
 
 `test/auth-audience.test.ts` uses the installed Clerk SDK with ephemeral local RSA keys and no Clerk network calls. These regression tests do not replace a live Clerk-to-Worker integration test.
 
-Frontend configuration (names only): `NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY`, `CLERK_SECRET_KEY`, `NEXT_PUBLIC_PLATFORM_API_URL`, and, only for legacy chat, `NEXT_PUBLIC_LEGACY_API_URL`. Configure Clerk redirect URLs for `/login` and `/register` in the application's Clerk settings. The platform API requires a Clerk session token in the `Authorization: Bearer` header. A Clerk application is not configured in this repository; live token verification requires a configured application and a separate integration test.
+Frontend configuration (names only): `NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY`, `CLERK_SECRET_KEY`, `NEXT_PUBLIC_PLATFORM_API_URL`, optional `NEXT_PUBLIC_CLERK_JWT_TEMPLATE`, and, only for legacy chat, `NEXT_PUBLIC_LEGACY_API_URL`. Configure Clerk redirect URLs for `/login` and `/register` in the application's Clerk settings. The platform API requires a Clerk session token in the `Authorization: Bearer` header. Live verification requires owner-provided development Clerk configuration and a separate integration test.
 
 Run `npm run typecheck`, `npm test`, and `npm run build` in this package. `build` performs a Wrangler dry run and writes only local `dist/` output; it does not publish a Worker. The current migration was validated against a disposable local D1 database as well as SQLite constraint tests.
 
