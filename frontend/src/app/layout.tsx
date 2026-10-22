@@ -21,6 +21,6 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
     </html>
   );
   return process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY
-    ? <ClerkProvider publishableKey={process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY}>{document}</ClerkProvider>
+    ? <ClerkProvider publishableKey={process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY} signInUrl="/login" signUpUrl="/register" signInFallbackRedirectUrl="/dashboard" signUpFallbackRedirectUrl="/dashboard">{document}</ClerkProvider>
     : document;
 }
