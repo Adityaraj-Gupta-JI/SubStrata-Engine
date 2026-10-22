@@ -68,15 +68,21 @@ export class NeonApiProvider implements NeonProvider {
     } catch { throw new ProvisioningError("PROVIDER_PROTOCOL"); }
   }
   async ensureDatabase(target: TenantTarget): Promise<DatabaseResult> {
+    const existing = await this.findDatabase(target);
+    if (existing) return existing;
+    const result = await this.request(`/branches/${this.branchId}/databases`, "POST", { database: { name: target.database, owner_name: this.config.ownerRole } });
+    return this.databaseResult(target, result);
+  }
+  async findDatabase(target: TenantTarget): Promise<DatabaseResult | null> {
     validateTarget(target);
     const path = `/branches/${this.branchId}/databases`;
     const listed = await this.request(path, "GET");
     if (!Array.isArray(listed.databases)) throw new ProvisioningError("PROVIDER_PROTOCOL");
     const matches = listed.databases.map(object).filter(row => row.name === target.database);
-    let result: Record<string, unknown>;
     if (matches.length > 1) throw new ProvisioningError("RESOURCE_CONFLICT");
-    if (matches.length) result = { database: matches[0] };
-    else result = await this.request(path, "POST", { database: { name: target.database, owner_name: this.config.ownerRole } });
+    return matches.length ? this.databaseResult(target, { database: matches[0] }) : null;
+  }
+  private databaseResult(target: TenantTarget, result: Record<string, unknown>): DatabaseResult {
     const database = object(result.database);
     if (database.name !== target.database || database.owner_name !== this.config.ownerRole || database.branch_id !== this.branchId) {
       throw new ProvisioningError("RESOURCE_CONFLICT");
@@ -85,6 +91,15 @@ export class NeonApiProvider implements NeonProvider {
     // Preserve operation support if a response includes it; SQL readiness is still checked later.
     if (result.operations !== undefined && !Array.isArray(result.operations)) throw new ProvisioningError("PROVIDER_PROTOCOL");
     return { name: target.database, owner: this.config.ownerRole, operations: (result.operations ?? []).map(operation) };
+  }
+  async verifyEndpoint(host: string): Promise<void> {
+    const branch = object((await this.request(`/branches/${this.branchId}`, "GET")).branch);
+    if (branch.id !== this.branchId || branch.project_id !== this.projectId || branch.protected === true) throw new ProvisioningError("RESOURCE_CONFLICT");
+    const result = await this.request(`/branches/${this.branchId}/endpoints`, "GET");
+    if (!Array.isArray(result.endpoints) || !result.endpoints.some(value => {
+      const endpoint = object(value);
+      return endpoint.host === host && endpoint.branch_id === this.branchId && endpoint.project_id === this.projectId && endpoint.type === "read_write";
+    })) throw new ProvisioningError("RESOURCE_CONFLICT");
   }
   async operation(id: string): Promise<ProviderOperation> {
     if (!/^[a-f0-9-]{36}$/i.test(id)) throw new ProvisioningError("INVALID_OPERATION");

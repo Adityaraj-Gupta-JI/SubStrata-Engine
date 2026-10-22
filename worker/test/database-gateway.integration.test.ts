@@ -8,11 +8,14 @@ import { Miniflare, convertV4MiniflareOptions } from "miniflare";
 import { createHandler } from "../src/index";
 import { unauthorized } from "../src/errors";
 import { SqlRestrictedRoles } from "../src/neon/restricted-roles";
-import { type PrivilegedSession, type ProvisioningConnections, type TenantTarget } from "../src/neon/contracts";
-import { PgReadTransport, type CredentialResolver, type RuntimeCredential, LocalRuntimeCredentials } from "../src/database/transport";
+import { type TenantTarget } from "../src/neon/contracts";
+import { PgReadTransport, type CredentialResolver, LocalRuntimeCredentials } from "../src/database/transport";
 import type { TenantMetadata } from "../src/neon/provisioning";
 import { TenantProvisioner } from "../src/neon/provisioning";
 import { databaseApi } from "../../frontend/src/lib/api/databases";
+import { EncryptedCredentialVault } from "../src/neon/credential-vault";
+import { PgProvisioningConnections } from "../src/neon/connections";
+import { VaultRuntimeCredentials } from "../src/neon/development";
 
 const enabled = process.env.SUBSTRATA_LOCAL_POSTGRES === "1";
 const container = `substrata-gateway-${randomUUID()}`;
@@ -27,6 +30,7 @@ let runtime: Miniflare, db: D1Database, env: Env;
 let handler: ReturnType<typeof createHandler>;
 let transport: PgReadTransport;
 let resolver: CredentialResolver;
+let vault: EncryptedCredentialVault;
 function docker(args: string[]) {
   const result = spawnSync("docker", args, { encoding: "utf8", timeout: 30000, env: { ...process.env, POSTGRES_PASSWORD: password } });
   if (result.status !== 0) throw new Error("Disposable gateway container operation failed.");
@@ -37,16 +41,6 @@ async function withClient<T>(database: string, user: string, secret: string, run
   client.on("error", () => undefined);
   try { await client.connect(); return await run(client); }
   finally { await client.end().catch(() => undefined); }
-}
-function session(client: Client): PrivilegedSession {
-  return {
-    query: async (sql, parameters) => (await client.query(sql, parameters ? [...parameters] : undefined)).rows,
-    transaction: async commands => {
-      await client.query("BEGIN");
-      try { for (const command of commands) await client.query(command.sql, command.parameters ? [...command.parameters] : undefined); await client.query("COMMIT"); }
-      catch (error) { await client.query("ROLLBACK"); throw error; }
-    },
-  };
 }
 async function call(path: string, method = "GET", body?: object, subject = "owner") {
   return handler(new Request(`https://local.test/api/v1/workspaces/${path}`, { method, headers: { Authorization: `Bearer ${subject}`, "Content-Type": "application/json" }, ...(body ? { body: JSON.stringify(body) } : {}) }), env);
@@ -73,11 +67,14 @@ beforeAll(async () => {
     catch { if (Date.now() >= deadline) throw new Error("Disposable TLS PostgreSQL did not become ready."); await new Promise(resolve => setTimeout(resolve, 250)); }
   }
   for (const id of [ta, tb]) await withClient("postgres", "postgres", password, async client => { await client.query(`CREATE DATABASE "ss_t_${id}"`); });
-  const connections: ProvisioningConnections = {
-    admin: (database, run) => withClient(database, "postgres", password, client => run(session(client))),
-    runtime: (tenant, database, run) => withClient(database, tenant.runtimeRole, passwords.get(tenant.credentialReference)!, client => run(session(client))),
-  };
-  const roles = new SqlRestrictedRoles({ projectId: project, branchId: branch, ownerRole: "postgres", apiKey: "test-fixture", approvedDisposableEnvironment: true }, connections, { ensure: async reference => { if (!passwords.has(reference)) passwords.set(reference, randomBytes(32).toString("hex")); return passwords.get(reference)!; } });
+  runtime = new Miniflare({ ...convertV4MiniflareOptions({ modules: true, script: "export default { fetch() { return new Response('local'); } };", compatibilityDate: "2026-10-22", d1Databases: ["METADATA"], r2Buckets: ["VAULT"] }), telemetry: { enabled: false } });
+  db = await runtime.getD1Database("METADATA");
+  const bucket = await runtime.getR2Bucket("VAULT");
+  vault = new EncryptedCredentialVault({get:async key=>{const object=await bucket.get(key);return object?{size:object.size,etag:object.etag,json:()=>object.json()}:null;},put:(key,value,options)=>bucket.put(key,value,options)},`${project}/${branch}`,JSON.stringify({test:randomBytes(32).toString("hex")}),"test",async reference=>({tenantId:reference.split("/")[1],workspaceId:reference.endsWith(ta)?wa:wb,purpose:"postgres-runtime"}));
+  const endpoint = {projectId:project,branchId:branch,ownerRole:"postgres",host:"ep-local.region.aws.neon.tech",controlDatabase:"postgres"};
+  // Only the test client factory maps the approved endpoint to local TLS Docker.
+  const connections = new PgProvisioningConnections(endpoint,password,vault,options=>new Client({...options,host:"127.0.0.1",port,ssl:{ca,rejectUnauthorized:true}}));
+  const roles = new SqlRestrictedRoles({ projectId: project, branchId: branch, ownerRole: "postgres", apiKey: "test-fixture", approvedDisposableEnvironment: true }, connections, { ensure: async reference => { const secret=await vault.ensure(reference); passwords.set(reference,secret); return secret; } });
   for (const id of [ta, tb]) {
     await roles.configure(target(id));
     await roles.validateIsolation(target(id));
@@ -85,8 +82,6 @@ beforeAll(async () => {
       await client.query("CREATE TABLE tenant_data.departments (id int PRIMARY KEY); INSERT INTO tenant_data.departments VALUES (1); CREATE TABLE tenant_data.items (id int PRIMARY KEY, department_id int REFERENCES tenant_data.departments(id), name text NOT NULL, precise bigint); CREATE INDEX items_name_idx ON tenant_data.items(name); INSERT INTO tenant_data.items SELECT n, 1, 'item-' || n, 9007199254740993 FROM generate_series(1,250) n; CREATE VIEW tenant_data.items_view AS SELECT id,name FROM tenant_data.items; CREATE VIEW tenant_data.slow AS SELECT id, pg_sleep(0.02)::text AS waited FROM tenant_data.items; CREATE TABLE tenant_data.large (value text); INSERT INTO tenant_data.large VALUES (repeat('x',10000));");
     });
   }
-  runtime = new Miniflare({ ...convertV4MiniflareOptions({ modules: true, script: "export default { fetch() { return new Response('local'); } };", compatibilityDate: "2026-10-22", d1Databases: ["METADATA"] }), telemetry: { enabled: false } });
-  db = await runtime.getD1Database("METADATA");
   for (const file of ["0001_metadata.sql", "0002_neon_poc.sql"]) {
     const sql = readFileSync(new URL(`../migrations/${file}`, import.meta.url), "utf8");
     await db.batch(sql.split(";").map(part => part.trim()).filter(Boolean).map(part => db.prepare(part)));
@@ -100,7 +95,8 @@ beforeAll(async () => {
     ...[[ta,wa,"o-a"],[tb,wb,"o-b"]].map(([id,workspace,org]) => db.prepare("INSERT INTO managed_tenant_databases (id,workspace_id,organization_id,project_id,branch_id,database_name,runtime_role,credential_reference,state) VALUES (?,?,?,?,?,?,?,?,'active')").bind(id,workspace,org,project,branch,`ss_t_${id}`,`ss_r_${id}`,`neon-runtime/${id}`)),
   ]);
   env = { METADATA: db };
-  resolver = { resolve: async tenant => ({ reference: tenant.credential_reference, projectId: project, branchId: branch, database: tenant.database_name, user: tenant.runtime_role, host: "127.0.0.1", port, password: passwords.get(tenant.credential_reference)!, ca }) };
+  const runtimeCredentials = new VaultRuntimeCredentials(endpoint,vault);
+  resolver = { resolve: async tenant => ({ ...await runtimeCredentials.resolve(tenant), host: "127.0.0.1", port, ca }) };
   transport = new PgReadTransport(resolver);
   handler = createHandler(async request => {
     const subject = request.headers.get("Authorization")?.replace("Bearer ", "");
@@ -176,6 +172,23 @@ describe.runIf(enabled)("gateway with real TLS PostgreSQL + D1 (mocked Clerk ide
     expect((await request(`/${firstBody.data.id}/retry`)).status).toBe(202);
     expect(ensureDatabase).toHaveBeenCalledTimes(2);
     expect(JSON.stringify(firstBody)).not.toMatch(/credential|project_id|branch_id|runtime_role/);
+    const auditRows=await db.prepare("SELECT action,outcome FROM audit_events WHERE resource_id=?").bind(workspace).all<{action:string;outcome:string}>();
+    expect(auditRows.results).toEqual(expect.arrayContaining([
+      {action:"database.provision",outcome:"requested"},{action:"database.provision",outcome:"success"},
+      {action:"database.retry",outcome:"requested"},{action:"database.retry",outcome:"success"},
+    ]));
+    await db.prepare("UPDATE managed_tenant_databases SET state='failed' WHERE id=?").bind(firstBody.data.id).run();
+    ensureDatabase.mockRejectedValueOnce(new Error("PRIVATE_PROVIDER_SENTINEL"));
+    const failed=await request(`/${firstBody.data.id}/retry`);
+    expect(failed.status).toBe(503);
+    expect(await failed.text()).not.toContain("PRIVATE_PROVIDER_SENTINEL");
+    expect(await db.prepare("SELECT outcome FROM audit_events WHERE resource_id=? AND outcome='failed'").bind(workspace).first()).toMatchObject({outcome:"failed"});
+    await db.prepare("CREATE TRIGGER fail_provision_audit BEFORE INSERT ON audit_events WHEN NEW.action='database.retry' BEGIN SELECT RAISE(ABORT, 'fixture'); END").run();
+    try {
+      const before=ensureDatabase.mock.calls.length;
+      expect((await request(`/${firstBody.data.id}/retry`)).status).toBe(503);
+      expect(ensureDatabase).toHaveBeenCalledTimes(before);
+    } finally { await db.prepare("DROP TRIGGER fail_provision_audit").run(); }
   });
   it("enforces statement timeout, trusted TLS, and generic credential errors", async () => {
     const tenant = (await db.prepare("SELECT * FROM managed_tenant_databases WHERE id=?").bind(ta).first<TenantMetadata>())!;
@@ -210,5 +223,9 @@ describe.runIf(enabled)("gateway with real TLS PostgreSQL + D1 (mocked Clerk ide
     expect(rows.results.some(row=>row.outcome==="success")).toBe(true);
     expect(rows.results.some(row=>row.outcome==="denied")).toBe(true);
     expect(JSON.stringify(rows.results)).not.toMatch(/PRIVATE_SENTINEL|SELECT |password/);
+  });
+  it("revoked vault entries disable runtime reads even with active D1 metadata",async()=>{
+    await vault.revoke(`neon-runtime/${ta}`);
+    expect((await call(`${wa}/databases/${ta}/schemas`)).status).toBe(503);
   });
 });

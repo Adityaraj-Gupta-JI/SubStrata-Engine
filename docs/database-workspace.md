@@ -78,3 +78,7 @@ From `frontend/`: `npm test`, `npm run lint`, `npm run typecheck -- --incrementa
 All 136 Worker tests passed with local PostgreSQL enabled, including eight gateway integration tests. Worker typecheck and dry-run packaging passed. Both D1 migrations passed in a fresh `.wrangler/cp2-foundation-check` database; the additive second migration also passed against the existing local `.wrangler/r3-local` metadata without removing its records.
 
 All 12 frontend tests, lint (no warnings/errors), typecheck, the standalone Next.js production build, the final OpenNext rebuild (which reruns Next.js build) and frontend Wrangler dry-run packaging passed. Local unauthenticated requests to `/databases`, `/explorer`, `/sql` and `/sql-editor` returned 307 to `/login`; the running API returned health 200 and a protected database request 401. No new authenticated browser/Neon end-to-end acceptance was performed. No test containers or generated certificates remain from the integration fixtures.
+
+## Encrypted credential integration
+
+See [Neon development integration](neon-development-integration.md) for the encrypted R2 vault, tenant/workspace binding, server-only credential separation, exact future owner configuration, rotation and revocation limitations. Cloud provisioning remains disabled pending owner setup and subsequent live validation.

@@ -10,7 +10,8 @@ export interface TenantMetadata {
 const SAFE_CODES = new Set(["PROVIDER_RETRY", "RECONCILE_REQUIRED", "PROVIDER_CREDENTIALS", "PROVIDER_FAILURE", "PROVIDER_PROTOCOL", "RESOURCE_CONFLICT", "UNSAFE_ROLE", "ISOLATION_FAILED", "UNSAFE_EXTENSION_OR_ROUTINE", "ROLE_CONFIGURATION_FAILED", "MISSING_CREDENTIALS", "QUARANTINE_REQUIRED"]);
 
 // Internal entry point only. actorUserId must come from Clerk-verified resolution.
-// No public route, env binding, background timer or cloud resource is enabled here.
+// The authorized route composes this service only with approved provider/vault
+// dependencies. No background timer or automatic project creation is enabled.
 export class TenantProvisioner {
   constructor(private readonly db: D1Database, private readonly provider: NeonProvider, private readonly roles: RestrictedRoles, private readonly now: () => number = Date.now) {}
 

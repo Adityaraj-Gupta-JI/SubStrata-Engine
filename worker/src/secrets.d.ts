@@ -7,4 +7,11 @@ interface Env {
   FRONTEND_ORIGIN?: string;
   DATABASE_RUNTIME_MODE?: string;
   DATABASE_RUNTIME_CONFIG?: string;
+  TENANT_CREDENTIALS?: R2Bucket;
+  NEON_DEVELOPMENT_CONFIG?: string;
+  NEON_PROVISIONING_APPROVAL?: string;
+  NEON_API_KEY?: string;
+  NEON_ADMIN_PASSWORD?: string;
+  NEON_VAULT_KEYS?: string;
+  NEON_VAULT_KEY_ID?: string;
 }

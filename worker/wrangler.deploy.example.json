@@ -11,8 +11,15 @@
     "database_id": null,
     "migrations_dir": "migrations"
   }],
+  "r2_buckets": [{
+    "binding": "TENANT_CREDENTIALS",
+    "bucket_name": null
+  }],
   "vars": {
     "CLERK_ISSUER": null,
-    "FRONTEND_ORIGIN": null
+    "FRONTEND_ORIGIN": null,
+    "NEON_DEVELOPMENT_CONFIG": null,
+    "NEON_PROVISIONING_APPROVAL": null,
+    "NEON_VAULT_KEY_ID": null
   }
 }

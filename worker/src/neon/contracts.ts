@@ -1,4 +1,4 @@
-// Privileged provisioning only. This module is not imported by the public router.
+// Privileged provisioning contracts. No public credential or admin SQL endpoint.
 export class ProvisioningError extends Error {
   constructor(public readonly code: string, public readonly retryAfterMs = 0) {
     super("Tenant provisioning is unavailable.");

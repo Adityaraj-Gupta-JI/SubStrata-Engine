@@ -5,6 +5,7 @@ import { type TenantMetadata, type TenantProvisioner } from "../neon/provisionin
 import { pagination, uuid } from "../validation";
 import { approvedSelect, quoteIdentifier } from "./sql-policy";
 import { LocalRuntimeCredentials, PgReadTransport, type ReadTransport } from "./transport";
+import { developmentServices } from "../neon/development";
 
 export interface DatabaseServices {
   transport: ReadTransport;
@@ -12,6 +13,7 @@ export interface DatabaseServices {
   provisioning?: { durableSecrets: true; service: TenantProvisioner };
 }
 export function defaultDatabaseServices(env: Env, request: Request): DatabaseServices {
+  if (env.NEON_DEVELOPMENT_CONFIG !== undefined) return developmentServices(env);
   return { transport: new PgReadTransport(new LocalRuntimeCredentials(env, request)) };
 }
 function publicTenant(row: TenantMetadata) {
@@ -50,6 +52,27 @@ export async function databaseRoute(request: Request, env: Env, userId: string, 
   // assignment are enforced by workspaceAccess, including disabled organizations.
   requireRole(access.role, ["owner", "admin", "member", "viewer"]);
   const capabilities = { canRead: true, canProvision, provisioningConfigured: !!services.provisioning?.durableSecrets };
+  const provision = async (action: "provision" | "retry") => {
+    if (!services.provisioning?.durableSecrets) throw unavailable();
+    const audit = async (outcome: string) => {
+      try {
+        await env.METADATA.prepare("INSERT INTO audit_events (id, organization_id, actor_user_id, action, resource_type, resource_id, outcome, request_id) VALUES (?, ?, ?, ?, 'workspace', ?, ?, ?)")
+          .bind(crypto.randomUUID(), access.workspace.organization_id, userId, `database.${action}`, workspaceId, outcome, requestId).run();
+      } catch { throw unavailable(); }
+    };
+    // Persist the attempt before any provider/vault side effect. No secrets or
+    // provider errors belong in audit records; failed audit writes fail closed.
+    await audit("requested");
+    try {
+      const row = await services.provisioning.service.provision(workspaceId, userId);
+      await audit(row.state === "active" ? "success" : "pending");
+      return json({ data: publicTenant(row), requestId }, 202, requestId);
+    } catch (error) {
+      await audit("failed");
+      if (error instanceof ProvisioningError) throw unavailable();
+      throw error;
+    }
+  };
   if (!match[2]) {
     if (request.method === "GET") {
       const rows = await env.METADATA.prepare("SELECT * FROM managed_tenant_databases WHERE workspace_id = ? AND organization_id = ?").bind(workspaceId, access.workspace.organization_id).all<TenantMetadata>();
@@ -57,9 +80,7 @@ export async function databaseRoute(request: Request, env: Env, userId: string, 
     }
     if (request.method !== "POST") throw notFound();
     requireRole(access.role, ["owner", "admin"]);
-    if (!services.provisioning?.durableSecrets) throw unavailable();
-    try { return json({ data: publicTenant(await services.provisioning.service.provision(workspaceId, userId)), requestId }, 202, requestId); }
-    catch (error) { if (error instanceof ProvisioningError) throw unavailable(); throw error; }
+    return provision("provision");
   }
   if (!/^[a-f0-9]{32}$/.test(match[2])) throw badRequest("Invalid database ID.");
   const tenant = await env.METADATA.prepare("SELECT * FROM managed_tenant_databases WHERE id = ? AND workspace_id = ? AND organization_id = ?")
@@ -70,9 +91,7 @@ export async function databaseRoute(request: Request, env: Env, userId: string, 
   if (action === "retry" && request.method === "POST") {
     requireRole(access.role, ["owner", "admin"]);
     if (tenant.state !== "failed" || tenant.claim_id || tenant.last_error === "QUARANTINE_REQUIRED") throw new ApiError(409, "NOT_RETRYABLE", "Database provisioning cannot be retried now.");
-    if (!services.provisioning?.durableSecrets) throw unavailable();
-    try { return json({ data: publicTenant(await services.provisioning.service.provision(workspaceId, userId)), requestId }, 202, requestId); }
-    catch (error) { if (error instanceof ProvisioningError) throw unavailable(); throw error; }
+    return provision("retry");
   }
   if (!action || !["schemas", "tables", "relation", "rows", "query"].includes(action) || (action === "query" ? request.method !== "POST" : request.method !== "GET")) throw notFound();
   if (tenant.state !== "active") throw new ApiError(409, "DATABASE_NOT_READY", "Database is not ready.");

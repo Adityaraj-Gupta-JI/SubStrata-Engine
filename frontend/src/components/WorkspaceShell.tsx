@@ -6,6 +6,7 @@ import { useAuth, UserButton } from "@clerk/nextjs";
 import { useEffect, useState, type FormEvent, type ReactNode } from "react";
 import { platformGet, platformPost, platformToken, type Organization, type Page, type Session, type Workspace } from "@/lib/api/platform";
 import { WorkspaceSelectionContext } from "./DatabaseWorkspace";
+import { browserSelectionStorage, readWorkspaceSelection, saveWorkspaceSelection } from "@/lib/workspace-selection";
 
 const groups = [
   { label: "Workspace", links: [["Dashboard", "/dashboard"], ["AI chat", "/ai-chat"], ["Databases", "/databases"], ["SQL editor", "/sql-editor"], ["Explorer", "/explorer"], ["Agent runs", "/agent-runs"]] },
@@ -15,7 +16,7 @@ const groups = [
 export function WorkspaceShell({ children }: { children: ReactNode }) {
   const pathname = usePathname();
   const [open, setOpen] = useState(false);
-  const { isLoaded, isSignedIn, getToken } = useAuth();
+  const { isLoaded, isSignedIn, getToken, userId } = useAuth();
   const [organizations, setOrganizations] = useState<Organization[]>([]);
   const [workspaces, setWorkspaces] = useState<Workspace[]>([]);
   const [organizationId, setOrganizationId] = useState("");
@@ -35,14 +36,15 @@ export function WorkspaceShell({ children }: { children: ReactNode }) {
         const result = await platformGet<Page<Organization>>("/organizations", token);
         if (cancelled) return;
         setOrganizations(result.data);
-        setOrganizationId(result.data[0]?.id ?? "");
+        const saved = userId ? readWorkspaceSelection(browserSelectionStorage(), userId) : {};
+        setOrganizationId(result.data.find(row => row.id === saved.organizationId)?.id ?? result.data[0]?.id ?? "");
         setStatus(result.data.length ? "" : "No organizations yet.");
       } catch (error) {
         if (!cancelled) setStatus(error instanceof Error ? error.message : "Workspace unavailable.");
       }
     })();
     return () => { cancelled = true; };
-  }, [getToken, isLoaded, isSignedIn]);
+  }, [getToken, isLoaded, isSignedIn, userId]);
 
   useEffect(() => {
     if (!organizationId || !isSignedIn) return;
@@ -53,15 +55,21 @@ export function WorkspaceShell({ children }: { children: ReactNode }) {
         const result = await platformGet<Page<Workspace>>(`/organizations/${organizationId}/workspaces`, token);
         if (cancelled) return;
         setWorkspaces(result.data);
-        setWorkspaceId(result.data[0]?.id ?? "");
-        setDatabaseId("");
+        const saved = userId ? readWorkspaceSelection(browserSelectionStorage(), userId) : {};
+        const selected = saved.organizationId === organizationId ? result.data.find(row => row.id === saved.workspaceId) : undefined;
+        setWorkspaceId(selected?.id ?? result.data[0]?.id ?? "");
+        setDatabaseId(selected ? saved.databaseId ?? "" : "");
         setStatus(result.data.length ? "" : "No workspaces assigned.");
       } catch (error) {
         if (!cancelled) setStatus(error instanceof Error ? error.message : "Workspace unavailable.");
       }
     })();
     return () => { cancelled = true; };
-  }, [getToken, organizationId, isSignedIn]);
+  }, [getToken, organizationId, isSignedIn, userId]);
+
+  useEffect(() => {
+    if (userId && organizationId && workspaceId) saveWorkspaceSelection(browserSelectionStorage(), userId, { organizationId, workspaceId, databaseId });
+  }, [userId, organizationId, workspaceId, databaseId]);
 
   async function createMetadata(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
