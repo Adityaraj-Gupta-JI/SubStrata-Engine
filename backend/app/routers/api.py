@@ -1,12 +1,7 @@
 import httpx
-from fastapi import APIRouter, Header, HTTPException, Depends, status
+from fastapi import APIRouter, Header, HTTPException
 from pydantic import BaseModel, Field
-from typing import Optional, List, Dict, Any
-from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import text
-
-from app.database.connection import get_db
-from app.tools.db_tools import execute_raw_sql
+from typing import Optional
 
 router = APIRouter()
 
@@ -100,28 +95,16 @@ async def execute_agent_chat(
             if res.status_code == 200 and "choices" in data and len(data["choices"]) > 0:
                 return {"reply": data["choices"][0]["message"]["content"], "model": payload.model}
             
-            err = data.get("error", {}).get("message") if isinstance(data, dict) else res.text
-            raise HTTPException(status_code=res.status_code or 500, detail=f"OpenRouter Error: {err}")
-        except httpx.RequestError as e:
-            raise HTTPException(status_code=500, detail=f"Network error: {str(e)}")
+            raise HTTPException(status_code=502, detail="OpenRouter request failed.")
+        except httpx.RequestError:
+            raise HTTPException(status_code=503, detail="OpenRouter request failed.")
 
 @router.post("/execute-sql")
-async def run_sql(payload: ExecuteSqlRequest, db: AsyncSession = Depends(get_db)):
-    return await execute_raw_sql(db, payload.query, payload.tenant_id)
+async def run_sql(payload: ExecuteSqlRequest):
+    """Legacy arbitrary SQL execution is disabled until authorization exists."""
+    raise HTTPException(status_code=503, detail="Legacy SQL execution is unavailable.")
 
 @router.get("/inspect/{tenant_id}")
-async def inspect_tenant_database(tenant_id: str, db: AsyncSession = Depends(get_db)):
-    """Fetches full dynamic EAV state for tenant visualization."""
-    try:
-        query = text("""
-            SELECT e.id as entity_id, e.name as entity_name, a.name as attribute, ev.value_text as value
-            FROM entities e
-            LEFT JOIN entity_values ev ON e.id = ev.entity_id
-            LEFT JOIN attributes a ON ev.attribute_id = a.id
-            WHERE e.tenant_id = :tenant_id
-        """)
-        result = await db.execute(query, {"tenant_id": tenant_id})
-        rows = [dict(row._mapping) for row in result.fetchall()]
-        return {"tenant_id": tenant_id, "data": rows}
-    except Exception as e:
-        return {"tenant_id": tenant_id, "data": [], "error": str(e)}
+async def inspect_tenant_database(tenant_id: str):
+    """Legacy tenant inspection is disabled until authorization exists."""
+    raise HTTPException(status_code=503, detail="Legacy database inspection is unavailable.")

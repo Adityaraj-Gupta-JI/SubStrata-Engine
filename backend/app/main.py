@@ -31,8 +31,8 @@ async def health_db():
         async for db in get_db():
             await db.execute(text("SELECT 1"))
             return {"status": "online", "database": "connected"}
-    except Exception as e:
-        return {"status": "degraded", "database": "disconnected", "error": str(e)}
+    except Exception:
+        return {"status": "degraded", "database": "disconnected"}
 
 # 3. Mount API v1 Router from app/routers/api.py
 app.include_router(api_router, prefix="/api/v1")
