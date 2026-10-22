@@ -5,6 +5,7 @@ import {
   listOrganizations, listWorkspaces, resolveUser, workspaceAccess,
 } from "./metadata";
 import { nameAndSlug, pagination, uuid } from "./validation";
+import { databaseRoute, defaultDatabaseServices, type DatabaseServices } from "./database/gateway";
 
 export type Authenticator = (request: Request, env: Env) => Promise<SessionIdentity>;
 
@@ -19,7 +20,7 @@ function cors(request: Request, env: Env, response: Response): Response {
   return response;
 }
 
-async function route(request: Request, env: Env, requestId: string, authenticate: Authenticator): Promise<Response> {
+async function route(request: Request, env: Env, requestId: string, authenticate: Authenticator, databases?: DatabaseServices): Promise<Response> {
   const url = new URL(request.url);
   const path = url.pathname;
   const method = request.method;
@@ -31,6 +32,10 @@ async function route(request: Request, env: Env, requestId: string, authenticate
   const identity = await authenticate(request, env);
   const user = await resolveUser(env.METADATA, identity.clerkUserId);
   const db = env.METADATA;
+  if (path.match(/^\/api\/v1\/workspaces\/[^/]+\/databases(?:\/|$)/)) {
+    const response = await databaseRoute(request, env, user.id, requestId, databases ?? defaultDatabaseServices(env, request));
+    if (response) return response;
+  }
 
   if (method === "GET" && path === "/api/v1/auth/session") {
     return json({ user: { id: user.id }, session: { authenticated: true }, requestId }, 200, requestId);
@@ -80,7 +85,7 @@ async function route(request: Request, env: Env, requestId: string, authenticate
   throw notFound();
 }
 
-export function createHandler(authenticate: Authenticator = verifySession) {
+export function createHandler(authenticate: Authenticator = verifySession, databases?: DatabaseServices) {
   return async (request: Request, env: Env): Promise<Response> => {
     const requestId = crypto.randomUUID();
     if (request.method === "OPTIONS") {
@@ -91,7 +96,7 @@ export function createHandler(authenticate: Authenticator = verifySession) {
       return cors(request, env, new Response(null, { status: 204, headers: { "X-Request-Id": requestId } }));
     }
     try {
-      return cors(request, env, await route(request, env, requestId, authenticate));
+      return cors(request, env, await route(request, env, requestId, authenticate, databases));
     } catch (error) {
       if (error instanceof ApiError) {
         return cors(request, env, json({ error: { code: error.code, message: error.publicMessage, requestId } }, error.status, requestId));

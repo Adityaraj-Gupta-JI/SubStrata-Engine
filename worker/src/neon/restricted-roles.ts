@@ -63,10 +63,12 @@ export class SqlRestrictedRoles implements RestrictedRoles {
           { sql: "REVOKE ALL ON SCHEMA tenant_data FROM PUBLIC" },
           { sql: "REVOKE ALL ON ALL FUNCTIONS IN SCHEMA tenant_data FROM PUBLIC" },
           { sql: `GRANT USAGE ON SCHEMA tenant_data TO ${role}` },
-          { sql: `GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA tenant_data TO ${role}` },
-          { sql: `GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA tenant_data TO ${role}` },
-          { sql: `ALTER DEFAULT PRIVILEGES FOR ROLE ${owner} IN SCHEMA tenant_data GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO ${role}` },
-          { sql: `ALTER DEFAULT PRIVILEGES FOR ROLE ${owner} IN SCHEMA tenant_data GRANT USAGE, SELECT ON SEQUENCES TO ${role}` },
+          { sql: `REVOKE ALL ON ALL TABLES IN SCHEMA tenant_data FROM ${role}` },
+          { sql: `REVOKE ALL ON ALL SEQUENCES IN SCHEMA tenant_data FROM ${role}` },
+          { sql: `GRANT SELECT ON ALL TABLES IN SCHEMA tenant_data TO ${role}` },
+          { sql: `ALTER DEFAULT PRIVILEGES FOR ROLE ${owner} IN SCHEMA tenant_data REVOKE ALL ON TABLES FROM ${role}` },
+          { sql: `ALTER DEFAULT PRIVILEGES FOR ROLE ${owner} IN SCHEMA tenant_data REVOKE ALL ON SEQUENCES FROM ${role}` },
+          { sql: `ALTER DEFAULT PRIVILEGES FOR ROLE ${owner} IN SCHEMA tenant_data GRANT SELECT ON TABLES TO ${role}` },
           { sql: `ALTER DEFAULT PRIVILEGES FOR ROLE ${owner} REVOKE EXECUTE ON FUNCTIONS FROM PUBLIC` },
         ]);
         safeRole((await session.query<RoleProfile>(PROFILE, [target.runtimeRole]))[0], target);

@@ -10,11 +10,14 @@
     "migrate:local": "wrangler d1 migrations apply METADATA --local --persist-to .wrangler/r3-local"
   },
   "dependencies": {
-    "@clerk/backend": "^2.0.0"
+    "@clerk/backend": "^2.0.0",
+    "pg": "8.23.1",
+    "pgsql-ast-parser": "12.0.2"
   },
   "devDependencies": {
     "@cloudflare/workers-types": "^5.20261019.1",
     "@types/node": "^24.19.2",
+    "@types/pg": "8.23.1",
     "miniflare": "5.20261019.1-beta",
     "typescript": "^5.0.0",
     "vitest": "^5.0.5",

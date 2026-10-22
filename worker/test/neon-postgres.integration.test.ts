@@ -97,17 +97,16 @@ describe.runIf(enabled)("real disposable PostgreSQL 16 isolation (not Neon)", ()
     // Wrong password must fail as authentication, not merely ACL failure.
     expect(() => sql(a.database, a.runtimeRole, "wrong-local-test-password", "SELECT 1;")).toThrow();
   });
-  it("permits own-tenant DML but denies foreign access and privilege escalation", async () => {
+  it("permits own-tenant reads but denies writes, foreign access and privilege escalation", async () => {
     for (const tenant of [a, b]) {
-      sql(tenant.database, "postgres", adminPassword, "CREATE TABLE tenant_data.poc (value text NOT NULL);");
+      sql(tenant.database, "postgres", adminPassword, "CREATE TABLE tenant_data.poc (value text NOT NULL); INSERT INTO tenant_data.poc VALUES ('disposable');");
       await connections.runtime(tenant, tenant.database, async current => {
-        await current.transaction([{ sql: "INSERT INTO tenant_data.poc (value) VALUES ($1)", parameters: ["disposable"] }]);
         expect(await current.query("SELECT count(*)::int AS count FROM tenant_data.poc")).toEqual([{ count: 1 }]);
       });
       const password = passwords.get(tenant.credentialReference)!;
       const other = tenant === a ? b : a;
       expect(() => sql(other.database, tenant.runtimeRole, password, "SELECT 1;")).toThrow(expect.objectContaining({ code: "42501" }));
-      for (const statement of ["CREATE DATABASE forbidden_poc_database;", "CREATE ROLE forbidden_poc_role;", "SET ROLE postgres;", "CREATE EXTENSION dblink WITH SCHEMA tenant_data;", "CREATE TABLE public.forbidden_poc (id int);", "CREATE TABLE tenant_data.forbidden_poc (id int);"]) {
+      for (const statement of ["INSERT INTO tenant_data.poc VALUES ('denied');", "UPDATE tenant_data.poc SET value='denied';", "DELETE FROM tenant_data.poc;", "CREATE DATABASE forbidden_poc_database;", "CREATE ROLE forbidden_poc_role;", "SET ROLE postgres;", "CREATE EXTENSION dblink WITH SCHEMA tenant_data;", "CREATE TABLE public.forbidden_poc (id int);", "CREATE TABLE tenant_data.forbidden_poc (id int);"]) {
         expect(() => sql(tenant.database, tenant.runtimeRole, password, statement)).toThrow(expect.objectContaining({ code: "42501" }));
       }
     }

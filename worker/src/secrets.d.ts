@@ -5,4 +5,6 @@ interface Env {
   CLERK_ISSUER?: string;
   CLERK_AUDIENCE?: string;
   FRONTEND_ORIGIN?: string;
+  DATABASE_RUNTIME_MODE?: string;
+  DATABASE_RUNTIME_CONFIG?: string;
 }

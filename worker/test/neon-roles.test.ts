@@ -47,7 +47,7 @@ describe("restricted role policy (mocked PostgreSQL executor)", () => {
     expect(f.commands[0].parameters).toEqual(["a".repeat(64)]);
     expect(text).toContain(`REVOKE ALL ON DATABASE "${foreign}" FROM PUBLIC`);
     expect(text).toContain(`GRANT CONNECT ON DATABASE "${target.database}" TO "${target.runtimeRole}"`);
-    expect(text).not.toMatch(/GRANT (?:CREATE|ALL|neon_superuser)/);
+    expect(text).not.toMatch(/GRANT (?:CREATE|ALL|INSERT|UPDATE|DELETE|neon_superuser)/);
     expect(text).toContain("REVOKE EXECUTE ON FUNCTIONS FROM PUBLIC");
     expect(text).toContain("NOLOGIN");
     expect(text).not.toMatch(/ALTER ROLE .*" LOGIN/);
