@@ -59,8 +59,11 @@ describe("encrypted credentials in real disposable local R2 (no cloud)",()=>{
     expect(after.iv).toHaveLength(24);
     const foreign=new EncryptedCredentialVault(port,scope,ring,"current",async reference=>({...await binding(reference),workspaceId:"workspace-b"}));
     await expect(foreign.read(ref("a"))).rejects.toMatchObject({code:"MISSING_CREDENTIALS"});
+    await expect(foreign.rewrap(ref("a"))).rejects.toMatchObject({code:"MISSING_CREDENTIALS"});
+    await expect(foreign.revoke(ref("a"))).rejects.toMatchObject({code:"MISSING_CREDENTIALS"});
     const wrongTenant=new EncryptedCredentialVault(port,scope,ring,"current",async reference=>({...await binding(reference),tenantId:"b".repeat(32)}));
     await expect(wrongTenant.read(ref("a"))).rejects.toMatchObject({code:"MISSING_CREDENTIALS"});
+    await expect(wrongTenant.revoke(ref("a"))).rejects.toMatchObject({code:"MISSING_CREDENTIALS"});
     expect(await vault().read(ref("a"))).toBe(secret);
   });
   it("reconciles a persisted create after the store response is lost",async()=>{

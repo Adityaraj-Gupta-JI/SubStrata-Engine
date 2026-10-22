@@ -5,6 +5,7 @@
   "scripts": {
     "dev": "wrangler dev --local --persist-to .wrangler/r3-local",
     "typecheck": "tsc --noEmit",
+    "types": "wrangler types --include-runtime=false --strict-vars=false --env-interface WorkerBindings --env-file types.env.example",
     "test": "vitest run",
     "build": "wrangler deploy --dry-run --outdir dist",
     "migrate:local": "wrangler d1 migrations apply METADATA --local --persist-to .wrangler/r3-local"

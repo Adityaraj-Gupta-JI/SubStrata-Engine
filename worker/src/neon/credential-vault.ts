@@ -92,7 +92,10 @@ export class EncryptedCredentialVault {
     try {
       const path = this.path(reference);
       const existing = await this.bucket.get(path);
-      if (!existing) throw unavailable();
+      if (!existing || existing.size > 4096) throw unavailable();
+      // Maintenance must authenticate the same tenant/workspace context as reads
+      // and rewrapping before replacing an object with a tombstone.
+      await this.decrypt(reference, await existing.json());
       const saved = await this.bucket.put(path, JSON.stringify({ version: 1, revoked: true }), { onlyIf: { etagMatches: existing.etag }, httpMetadata: { contentType: "application/json" } });
       if (!saved) throw unavailable();
       // Tombstones deliberately fail decryption and prevent ensure() regeneration.

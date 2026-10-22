@@ -10,6 +10,8 @@
     "logs": { "enabled": true, "head_sampling_rate": 1 },
     "traces": { "enabled": true, "head_sampling_rate": 0.01 }
   },
+  // Local simulation only. No cloud bucket name or remote R2 access is configured.
+  "r2_buckets": [{ "binding": "TENANT_CREDENTIALS", "remote": false }],
   "d1_databases": [{
     "binding": "METADATA",
     "database_name": "substrata-metadata",
