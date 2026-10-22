@@ -2,6 +2,8 @@
 
 Date: 2026-10-22. Baseline: `f97c9d0`, local branch `dev/substrata-v2`.
 
+Integrated CP2 follow-up: the read gateway tightens runtime roles to SELECT-only. The historical DML PoC findings below describe the foundation checkpoint; current behavior and remaining enablement gates are in [database-workspace.md](database-workspace.md).
+
 ## Decision and evidence
 
 **Conditional feasibility: suitable for a bounded tenant shard, subject to a live security test.** Retain Clerk, the authorization Worker and D1 metadata. Place each managed tenant in its own logical PostgreSQL database on an explicitly selected Neon development branch. This PoC maps one managed tenant database to one workspace. The old organization-level `database_tenants` table is unchanged; product approval is needed before making the workspace mapping permanent.

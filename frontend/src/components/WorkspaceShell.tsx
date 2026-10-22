@@ -5,6 +5,7 @@ import { usePathname } from "next/navigation";
 import { useAuth, UserButton } from "@clerk/nextjs";
 import { useEffect, useState, type FormEvent, type ReactNode } from "react";
 import { platformGet, platformPost, platformToken, type Organization, type Page, type Session, type Workspace } from "@/lib/api/platform";
+import { WorkspaceSelectionContext } from "./DatabaseWorkspace";
 
 const groups = [
   { label: "Workspace", links: [["Dashboard", "/dashboard"], ["AI chat", "/ai-chat"], ["Databases", "/databases"], ["SQL editor", "/sql-editor"], ["Explorer", "/explorer"], ["Agent runs", "/agent-runs"]] },
@@ -19,6 +20,7 @@ export function WorkspaceShell({ children }: { children: ReactNode }) {
   const [workspaces, setWorkspaces] = useState<Workspace[]>([]);
   const [organizationId, setOrganizationId] = useState("");
   const [workspaceId, setWorkspaceId] = useState("");
+  const [databaseId, setDatabaseId] = useState("");
   const [status, setStatus] = useState("Loading session…");
   const [create, setCreate] = useState<"organization" | "workspace" | null>(null);
   const [saving, setSaving] = useState(false);
@@ -52,6 +54,7 @@ export function WorkspaceShell({ children }: { children: ReactNode }) {
         if (cancelled) return;
         setWorkspaces(result.data);
         setWorkspaceId(result.data[0]?.id ?? "");
+        setDatabaseId("");
         setStatus(result.data.length ? "" : "No workspaces assigned.");
       } catch (error) {
         if (!cancelled) setStatus(error instanceof Error ? error.message : "Workspace unavailable.");
@@ -74,11 +77,13 @@ export function WorkspaceShell({ children }: { children: ReactNode }) {
         setOrganizations(previous => [result.data, ...previous]);
         setWorkspaces([]);
         setWorkspaceId("");
+        setDatabaseId("");
         setOrganizationId(result.data.id);
       } else {
         const result = await platformPost<{ data: Workspace }>(`/organizations/${organizationId}/workspaces`, token, payload);
         setWorkspaces(previous => [result.data, ...previous]);
         setWorkspaceId(result.data.id);
+        setDatabaseId("");
       }
       setCreate(null);
       setStatus("");
@@ -97,7 +102,7 @@ export function WorkspaceShell({ children }: { children: ReactNode }) {
         <Link href="/dashboard" className="hidden text-xl font-black tracking-wider text-[#ff0055] lg:block">SUBSTRATA</Link>
         <div className="mt-5 space-y-2 rounded border border-[#2a3047] bg-[#131522] p-3 text-xs">
           <label className="block text-[#8b9bb4]" htmlFor="organization-select">ORGANIZATION</label>
-          <select id="organization-select" value={organizationId} onChange={event => { setOrganizationId(event.target.value); setWorkspaceId(""); setWorkspaces([]); setStatus("Loading workspaces…"); }} className="w-full bg-[#0d0e17] p-2 text-white" disabled={!organizations.length || saving}>
+          <select id="organization-select" value={organizationId} onChange={event => { setOrganizationId(event.target.value); setWorkspaceId(""); setDatabaseId(""); setWorkspaces([]); setStatus("Loading workspaces…"); }} className="w-full bg-[#0d0e17] p-2 text-white" disabled={!organizations.length || saving}>
             {!organizations.length && <option value="">None available</option>}
             {organizations.map(org => <option key={org.id} value={org.id}>{org.name}</option>)}
           </select>
@@ -113,7 +118,7 @@ export function WorkspaceShell({ children }: { children: ReactNode }) {
             <button type="button" disabled={saving} onClick={() => setCreate(null)} className="underline">Cancel</button>
           </form>}
           <label className="block text-[#8b9bb4]" htmlFor="workspace-select">WORKSPACE</label>
-          <select id="workspace-select" value={workspaceId} onChange={event => setWorkspaceId(event.target.value)} className="w-full bg-[#0d0e17] p-2 text-white" disabled={!workspaces.length}>
+          <select id="workspace-select" value={workspaceId} onChange={event => { setWorkspaceId(event.target.value); setDatabaseId(""); }} className="w-full bg-[#0d0e17] p-2 text-white" disabled={!workspaces.length}>
             {!workspaces.length && <option value="">None available</option>}
             {workspaces.map(workspace => <option key={workspace.id} value={workspace.id}>{workspace.name}</option>)}
           </select>
@@ -128,7 +133,7 @@ export function WorkspaceShell({ children }: { children: ReactNode }) {
       </aside>
       <div className="min-w-0 flex-1">
         <div className="hidden items-center justify-between border-b border-[#2a3047] bg-[#0d0e17] px-6 py-4 lg:flex"><span className="text-sm font-bold">Database workspace</span><UserButton /></div>
-        <main id="main-content" className="min-w-0 p-4 md:p-6">{children}</main>
+        <main id="main-content" className="min-w-0 p-4 md:p-6"><WorkspaceSelectionContext.Provider value={{ workspaceId, databaseId, setDatabaseId }}>{children}</WorkspaceSelectionContext.Provider></main>
       </div>
     </div>
   );

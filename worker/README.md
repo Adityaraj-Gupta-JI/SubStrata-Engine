@@ -1,6 +1,6 @@
 # SubStrata platform API (local foundation)
 
-This package is the Cloudflare Worker API for platform metadata. It does not execute SQL, provision PostgreSQL, connect customer databases, or run AI providers.
+This package is the Cloudflare Worker API for platform metadata and the authorized read-only PostgreSQL gateway. It does not enable writes, automatically provision Neon resources, or run AI providers. Provisioning remains gated on approved provider configuration and durable external secrets. See [database workspace setup and limits](../docs/database-workspace.md).
 
 ## Local setup
 
