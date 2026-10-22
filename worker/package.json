@@ -1,0 +1,21 @@
+{
+  "name": "substrata-api-worker",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "build": "wrangler deploy --dry-run --outdir dist",
+    "migrate:local": "wrangler d1 migrations apply METADATA --local"
+  },
+  "dependencies": {
+    "@clerk/backend": "^2.0.0"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^5.20261019.1",
+    "@types/node": "^24.19.2",
+    "typescript": "^5.0.0",
+    "vitest": "^5.0.5",
+    "wrangler": "^4.0.0"
+  }
+}

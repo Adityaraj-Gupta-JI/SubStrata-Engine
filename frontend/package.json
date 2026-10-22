@@ -3,18 +3,20 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-  "dev": "next dev",
-  "build": "next build --webpack",
-  "start": "next start",
-  "lint": "eslint src",
-  "typecheck": "tsc --noEmit",
-  "build:worker": "open-next-cloudflare build",
-  "preview:worker": "wrangler dev",
-  "deploy:worker": "open-next-cloudflare build && wrangler deploy"
-},
+    "dev": "next dev",
+    "build": "next build --webpack",
+    "start": "next start",
+    "lint": "eslint src",
+    "typecheck": "tsc --noEmit",
+    "test": "node --experimental-transform-types --test test/*.test.mjs",
+    "build:worker": "opennextjs-cloudflare build",
+    "preview:worker": "wrangler dev",
+    "deploy:worker": "opennextjs-cloudflare build && wrangler deploy"
+  },
   "dependencies": {
+    "@clerk/nextjs": "^7.9.19",
     "lucide-react": "^1.41.0",
-    "next": "16.3.4",
+    "next": "^16.4.2",
     "react": "19.2.8",
     "react-dom": "19.2.8"
   },
@@ -25,7 +27,7 @@
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "eslint": "^9",
-    "eslint-config-next": "16.3.4",
+    "eslint-config-next": "^16.4.2",
     "tailwindcss": "^4",
     "typescript": "^5",
     "wrangler": "^4.135.0"

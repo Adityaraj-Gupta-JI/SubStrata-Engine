@@ -20,6 +20,7 @@ build/
 frontend/node_modules/
 frontend/.next/
 frontend/out/
+*.tsbuildinfo
 
 # IDE & OS
 .vscode/

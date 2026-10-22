@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { ClerkProvider } from "@clerk/nextjs";
 import "./globals.css";
 
 export const metadata: Metadata = {
@@ -8,7 +9,7 @@ export const metadata: Metadata = {
 // src/app/layout.tsx
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
-  return (
+  const document = (
     <html
       lang="en"
       suppressHydrationWarning
@@ -19,4 +20,7 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
       </body>
     </html>
   );
+  return process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY
+    ? <ClerkProvider publishableKey={process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY}>{document}</ClerkProvider>
+    : document;
 }
