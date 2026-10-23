@@ -1,4 +1,6 @@
 "use client";
+import Link from "next/link";
+import {recordLink} from "@/lib/product-workflow";
 import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react';
 import { cp5Api, type Agent, type AgentRun, type AgentStep, type AgentTemplate } from '@/lib/api/cp5';
 import type { AIMessage } from '@/lib/api/ai';
@@ -10,8 +12,9 @@ function AgentsBody({ workspace }: {
 }) {
     const provider = useAIProvider(), { workspaceId, token } = workspace;
     const [agents, setAgents] = useState<Agent[]>([]), [templates, setTemplates] = useState<AgentTemplate[]>([]), [runs, setRuns] = useState<AgentRun[]>([]), [selected, setSelected] = useState(''), [name, setName] = useState(''), [template, setTemplate] = useState('schema-analyst'), [instructions, setInstructions] = useState(''), [model, setModel] = useState(''), [maxSteps, setMaxSteps] = useState(3), [deadline, setDeadline] = useState(60), [allowRows, setAllowRows] = useState(false), [goal, setGoal] = useState(''), [busy, setBusy] = useState(false), [running, setRunning] = useState(false), [loading, setLoading] = useState(true), [error, setError] = useState(''), [notice, setNotice] = useState(''), [steps, setSteps] = useState<AgentStep[]>([]), [messages, setMessages] = useState<AIMessage[]>([]), [delta, setDelta] = useState(''), [runId, setRunId] = useState('');
-    const controller = useRef<AbortController | null>(null), activeRun = useRef('');
-    useEffect(() => () => controller.current?.abort(), []);
+    const [conversationId,setConversationId]=useState('');
+    const controller = useRef<AbortController | null>(null), activeRun = useRef(''), mounted=useRef(true), inspection=useRef(0);
+    useEffect(() => {mounted.current=true;return()=>{mounted.current=false;controller.current?.abort();};}, []);
     const refresh = useCallback(async () => { if (!workspaceId) {
         setLoading(false);
         return;
@@ -54,22 +57,26 @@ function AgentsBody({ workspace }: {
     finally {
         setBusy(false);
     } }
-    async function inspect(id: string) { setBusy(true); setError(''); try {
+    const inspect = useCallback(async (id: string) => { const current=++inspection.current;setBusy(true); setError(''); setSteps([]);setMessages([]);setConversationId(''); try {
         const result = (await cp5Api.run(workspaceId, await token(), id)).data;
+        if(!mounted.current||inspection.current!==current)return;
         setRunId(id);
+        window.history.replaceState(null,"",`#${new URLSearchParams({run:id})}`);
         activeRun.current = id;
         setSteps(result.steps);
+        setConversationId(result.run.conversationId);
         setMessages(result.messages);
         setDelta('');
         setNotice(`Persisted status: ${result.run.status}${result.run.errorCode ? ` (${result.run.errorCode})` : ''}`);
         setGoal(result.run.goal);
     }
     catch (e) {
-        setError(aiError(e));
+        if(mounted.current&&inspection.current===current)setError(aiError(e));
     }
     finally {
-        setBusy(false);
-    } }
+        if(mounted.current&&inspection.current===current)setBusy(false);
+    } },[workspaceId,token]);
+    useEffect(()=>{const restore=()=>{const id=new URLSearchParams(window.location.hash.slice(1)).get("run");if(id&&workspaceId)void inspect(id);};restore();window.addEventListener("hashchange",restore);return()=>window.removeEventListener("hashchange",restore);},[workspaceId,inspect]);
     async function run(e: FormEvent) { e.preventDefault(); if (!selected || running)
         return; setRunning(true); setError(''); setNotice('Starting foreground execution…'); setMessages([]); setSteps([]); setDelta(''); setRunId(''); activeRun.current = ''; const abort = new AbortController(); controller.current = abort; try {
         const result = await cp5Api.runAgent(workspaceId, await token(), selected, goal, text => setDelta(value => value + text), abort.signal, (type, data) => { if (!data || typeof data !== 'object')
@@ -79,6 +86,10 @@ function AgentsBody({ workspace }: {
             setNotice('Running… Keep this page open.');
         } if (type === 'step')
             setSteps(value => [...value, data as AgentStep]); });
+        if(!mounted.current)return;
+        window.history.replaceState(null,"",`#${new URLSearchParams({run:result.runId})}`);
+        setRunId(result.runId);
+        setConversationId(result.conversationId);
         setMessages(result.messages);
         setDelta('');
         setNotice(`Execution ${result.status}.`);
@@ -104,6 +115,6 @@ function AgentsBody({ workspace }: {
     const saved = agents.find(a => a.id === selected);
     return <div className="space-y-6"><header><h1 className="text-2xl font-bold">Agents</h1><p className="text-[#8b9bb4]">Foreground workflows using your workspace permissions. Read-only tools; no autonomous writes or DDL.</p></header>{!workspaceId && <p>Select a workspace in the sidebar.</p>}{loading && <p role="status">Loading agents…</p>}{(error || provider.error) && <p role="alert" className="text-[#ff8da8]">{error || provider.error}</p>}{notice && <p role="status">{notice}</p>}
  <section className={aiPanel}><h2 className="font-bold">Agent configuration</h2><label className="block">Saved agent<select className={aiInput} value={selected} disabled={busy || running} onChange={e => edit(agents.find(a => a.id === e.target.value))}><option value="">New agent</option>{agents.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}</select></label><form onSubmit={e => void save(e)} className="space-y-3"><fieldset disabled={busy || running || !workspaceId} className="space-y-3"><label className="block">Name<input className={aiInput} maxLength={100} required value={name} onChange={e => setName(e.target.value)}/></label><label className="block">Template<select className={aiInput} value={template} onChange={e => setTemplate(e.target.value)}>{templates.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}</select></label><p className="text-sm">{templates.find(t => t.id === template)?.goal}</p><ModelSelector models={provider.models} value={model} onChange={setModel}/>{!provider.state?.configured && <p>Configure OpenRouter in AI settings before running an agent.</p>}<DatabaseSelector workspace={workspace}/><label className="block">Additional instructions<textarea className={aiInput} value={instructions} maxLength={2000} onChange={e => setInstructions(e.target.value)}/></label><div className="flex flex-wrap gap-4"><label>Maximum model steps (1–8)<input className={aiInput} type="number" min={1} max={8} required value={maxSteps} onChange={e => setMaxSteps(Number(e.target.value))}/></label><label>Deadline in seconds (10–120)<input className={aiInput} type="number" min={10} max={120} required value={deadline} onChange={e => setDeadline(Number(e.target.value))}/></label></div><label className="flex gap-2"><input type="checkbox" checked={allowRows} onChange={e => setAllowRows(e.target.checked)}/>Allow bounded permitted row previews to be sent to OpenRouter</label><button className={aiButton} disabled={!model}>{busy ? 'Saving…' : 'Save configuration'}</button><button className={aiButton} type="button" disabled={!selected} onClick={() => void remove()}>Delete agent</button></fieldset></form></section>
- <section className={aiPanel}><h2 className="font-bold">Run saved agent</h2>{saved && <p>Saved: {saved.name} · {saved.maxSteps} model steps · {saved.deadlineSeconds}s · Database {workspace.list?.data.find(d => d.id === saved.databaseId)?.name ?? (saved.databaseId ? 'Unavailable' : 'None')}</p>}<form className="space-y-3" onSubmit={e => void run(e)}><label className="block">Goal<textarea className={aiInput} required maxLength={4000} value={goal} disabled={running} onChange={e => setGoal(e.target.value)}/></label><div className="flex gap-3"><button className={aiButton} disabled={busy || running || !selected || !provider.state?.configured}>Run / retry as new execution</button><button type="button" className={aiButton} disabled={!runId} onClick={() => void cancel()}>Request cancellation</button></div></form>{delta && <pre aria-live="polite" className="whitespace-pre-wrap break-words">{delta}</pre>}{messages.map(m => <article key={m.id}><h3 className="font-bold">{m.role} · {m.status}</h3><p className="whitespace-pre-wrap break-words">{m.content}</p>{m.usage && <p>{m.usage.totalTokens} tokens</p>}{m.proposedSql && <p>Read-only SQL proposal. Review it in Chat or SQL before execution.</p>}</article>)}<h3 className="font-bold">Step trace</h3>{!steps.length && <p>No execution steps loaded.</p>}<ol className="space-y-2">{steps.map(s => <li key={s.sequence}>{s.sequence}. {s.kind} · {s.name} · {s.status} · {s.elapsedMs}ms{s.usage ? ` · ${s.usage.totalTokens} tokens` : ''}{s.errorCode ? ` · ${s.errorCode}` : ''}</li>)}</ol></section>
+ <section className={aiPanel}><h2 className="font-bold">Run saved agent</h2>{saved && <p>Saved: {saved.name} · {saved.maxSteps} model steps · {saved.deadlineSeconds}s · Database {workspace.list?.data.find(d => d.id === saved.databaseId)?.name ?? (saved.databaseId ? 'Unavailable' : 'None')}</p>}<form className="space-y-3" onSubmit={e => void run(e)}><label className="block">Goal<textarea className={aiInput} required maxLength={4000} value={goal} disabled={running} onChange={e => setGoal(e.target.value)}/></label><div className="flex gap-3"><button className={aiButton} disabled={busy || running || !selected || !provider.state?.configured}>Run / retry as new execution</button><button type="button" className={aiButton} disabled={!runId} onClick={() => void cancel()}>Request cancellation</button></div></form>{delta && <pre aria-live="polite" className="whitespace-pre-wrap break-words">{delta}</pre>}{messages.map(m => <article key={m.id}><h3 className="font-bold">{m.role} · {m.status}</h3><p className="whitespace-pre-wrap break-words">{m.content}</p>{m.usage && <p>{m.usage.totalTokens} tokens</p>}{m.proposedSql && <div><pre className="overflow-auto whitespace-pre-wrap">{m.proposedSql}</pre><p>Not executed. Review this proposal in its original conversation before executing.</p></div>}</article>)}{conversationId&&<Link className={aiButton} href={recordLink("/chat","conversation",conversationId)}>Open original conversation and review SQL proposals</Link>}<h3 className="font-bold">Step trace</h3>{!steps.length && <p>No execution steps loaded.</p>}<ol className="space-y-2">{steps.map(s => <li key={s.sequence}>{s.sequence}. {s.kind} · {s.name} · {s.status} · {s.elapsedMs}ms{s.usage ? ` · ${s.usage.totalTokens} tokens` : ''}{s.errorCode ? ` · ${s.errorCode}` : ''}</li>)}</ol></section>
  <section className={aiPanel}><h2 className="font-bold">Execution history</h2><button className={aiButton} disabled={running || busy} onClick={() => void refresh()}>Refresh persisted status</button>{!runs.length && <p>No executions yet.</p>}{runs.map(r => <div className="flex flex-wrap items-center gap-3 border-t border-[#2a3047] pt-2" key={r.id}><p className="break-all">{r.goal} · {r.status} · {r.createdAt}{r.errorCode ? ` · ${r.errorCode}` : ''}</p><button className={aiButton} disabled={running || busy} onClick={() => void inspect(r.id)}>View trace / recover goal</button></div>)}</section></div>;
 }

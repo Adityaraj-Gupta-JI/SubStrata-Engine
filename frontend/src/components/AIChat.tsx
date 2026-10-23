@@ -10,7 +10,7 @@ export function AIChatWorkspace() { const workspace = useDatabaseWorkspace(); re
 function AIChat({ workspace }: {
     workspace: ReturnType<typeof useDatabaseWorkspace>;
 }) {
-    const { workspaceId, token } = workspace;
+    const { workspaceId, token, setDatabaseId } = workspace;
     const provider = useAIProvider(), router = useRouter();
     const [conversations, setConversations] = useState<Conversation[]>([]), [current, setCurrent] = useState<Conversation | null>(null), [messages, setMessages] = useState<AIMessage[]>([]), [content, setContent] = useState(""), [model, setModel] = useState(""), [allowRows, setAllowRows] = useState(false), [busy, setBusy] = useState(false), [error, setError] = useState(""), [notice, setNotice] = useState(""), [streamText, setStreamText] = useState("");
     const controller = useRef<AbortController | null>(null), alive = useRef(true), selection = useRef(0);
@@ -29,7 +29,7 @@ function AIChat({ workspace }: {
         }
     }, [workspaceId, token]);
     useEffect(() => { void Promise.resolve().then(refresh); }, [refresh]);
-    async function open(id: string) {
+    const open = useCallback(async (id: string) => {
         const generation = ++selection.current;
         setBusy(true);
         setError("");
@@ -39,19 +39,23 @@ function AIChat({ workspace }: {
                 setCurrent(result.data.conversation);
                 setMessages(result.data.messages);
                 if (result.data.conversation.databaseId)
-                    workspace.setDatabaseId(result.data.conversation.databaseId);
+                    setDatabaseId(result.data.conversation.databaseId);
+                window.history.replaceState(null,"",`#${new URLSearchParams({conversation:id})}`);
             }
         }
         catch (error) {
-            if (alive.current)
+            if (alive.current && selection.current === generation) {
                 setError(aiError(error));
+                setCurrent(null);setMessages([]);
+            }
         }
         finally {
-            if (alive.current)
+            if (alive.current && selection.current === generation)
                 setBusy(false);
         }
-    }
-    function newConversation() { setCurrent(null); setMessages([]); setNotice(""); setError(""); setContent(""); }
+    }, [workspaceId, token, setDatabaseId]);
+    useEffect(()=>{const restore=()=>{const id=new URLSearchParams(window.location.hash.slice(1)).get("conversation");if(id&&workspaceId)void open(id);};restore();window.addEventListener("hashchange",restore);return()=>window.removeEventListener("hashchange",restore);},[workspaceId,open]);
+    function newConversation() { window.history.replaceState(null,"",window.location.pathname); setCurrent(null); setMessages([]); setNotice(""); setError(""); setContent(""); }
     async function send(event?: FormEvent) {
         event?.preventDefault();
         if (!content.trim() || busy)
@@ -70,6 +74,7 @@ function AIChat({ workspace }: {
                 if (!alive.current)
                     return;
                 setCurrent(selected);
+                window.history.replaceState(null,"",`#${new URLSearchParams({conversation:selected.id})}`);
             }
             const result = await aiApi.sendStream(workspaceId, selected.id, auth, request, text => { if (alive.current)
                 setStreamText(value => (value + text).slice(0, 60000)); }, controller.current.signal);
@@ -98,10 +103,10 @@ function AIChat({ workspace }: {
         workspace.setDatabaseId(current.databaseId);
         router.push("/sql-editor");
     }
-    return <div className="grid gap-4 xl:grid-cols-[15rem_minmax(0,1fr)]"><aside className={aiPanel}><button className={aiButton} disabled={busy} onClick={newConversation}>New conversation</button><button className={aiButton} disabled={busy || !workspaceId} onClick={() => void refresh()}>Refresh history</button><nav aria-label="Conversations" className="space-y-2">{!conversations.length && <p className="text-sm text-[#8b9bb4]">No conversations in this workspace.</p>}{conversations.map(c => <button className={`${aiButton} w-full break-words text-left`} key={c.id} aria-current={current?.id === c.id ? "true" : undefined} disabled={busy} onClick={() => void open(c.id)}>{c.title}{c.busy ? " · Running" : ""}</button>)}</nav></aside>
+    return <div className="grid gap-4 xl:grid-cols-[15rem_minmax(0,1fr)]"><aside className={aiPanel}><button className={aiButton} disabled={busy} onClick={newConversation}>New conversation</button><button className={aiButton} disabled={busy || !workspaceId} onClick={() => void refresh()}>Refresh history</button><Link className={aiButton} href="/agents">Configure and launch an authorized agent</Link><nav aria-label="Conversations" className="space-y-2">{!conversations.length && <p className="text-sm text-[#8b9bb4]">No conversations in this workspace.</p>}{conversations.map(c => <button className={`${aiButton} w-full break-words text-left`} key={c.id} aria-current={current?.id === c.id ? "true" : undefined} disabled={busy} onClick={() => void open(c.id)}>{c.title}{c.busy ? " · Running" : ""}</button>)}</nav></aside>
     <div className="min-w-0 space-y-4"><div className={aiPanel}><DatabaseSelector workspace={workspace}/><ModelSelector models={provider.models} value={current?.model || model || provider.state?.defaultModel || ""} onChange={setModel} disabled={busy || !!current}/>{current ? <p className="text-sm">Conversation database: {current.databaseId ? workspace.list?.data.find(d => d.id === current.databaseId)?.name || "Unavailable" : "None"}. Start a new conversation to change its model or database.</p> : <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={allowRows} onChange={e => setAllowRows(e.target.checked)}/>Allow bounded row previews to be sent to OpenRouter</label>}
       {!provider.state?.configured && <p>Configure your key in <Link className="underline" href="/settings/ai">AI settings</Link>.</p>}{provider.state && !provider.state.storageConfigured && <p role="status">Secure AI storage is not configured.</p>}{(error || provider.error) && <p role="alert" className="text-[#ff8da8]">{error || provider.error}</p>}{notice && <p role="status">{notice}</p>}</div>
-      {busy && <div role="status" className={aiPanel}><p className="animate-pulse text-sm text-[#00f0ff]">OpenRouter / authorized tools running…</p>{streamText && <pre className="whitespace-pre-wrap break-words text-sm">{streamText}</pre>}<p className="text-xs text-[#8b9bb4]">Streaming draft · Final status and usage appear when the turn is saved.</p></div>}<section aria-label="Conversation messages" aria-live="polite" className={aiPanel}>{!messages.length && <p className="text-[#8b9bb4]">Ask a question, inspect selected database metadata, or request a read-only SQL proposal. Only successful provider responses are labelled completed.</p>}{messages.map(message => <article key={message.id} className="space-y-3 border-b border-[#2a3047] pb-4"><h2 className="font-bold">{message.role === "user" ? "You" : "OpenRouter"} · {message.status}</h2><MessageContent content={message.content}/>{message.proposedSql && <div><p className="text-sm text-[#00f0ff]">SQL proposal · Not executed</p><pre className="overflow-auto whitespace-pre-wrap rounded bg-[#131522] p-3 text-sm">{message.proposedSql}</pre><button className={aiButton} onClick={() => sendSQL(message.proposedSql!)}>Review in SQL editor</button></div>}{message.trace.length > 0 && <details><summary>Tool activity ({message.trace.length})</summary><ul className="text-xs">{message.trace.map((t, i) => <li key={i}>{t.tool} · {t.status} · {t.elapsedMs} ms</li>)}</ul></details>}{message.usage && <p className="text-xs text-[#8b9bb4]">Usage: {message.usage.promptTokens} input + {message.usage.completionTokens} output = {message.usage.totalTokens} tokens</p>}{message.errorCode && <p className="text-xs text-[#ff8da8]">{message.errorCode}</p>}</article>)}</section>
+      {busy && <div role="status" className={aiPanel}><p className="animate-pulse text-sm text-[#00f0ff]">OpenRouter / authorized tools running…</p>{streamText && <pre className="whitespace-pre-wrap break-words text-sm">{streamText}</pre>}<p className="text-xs text-[#8b9bb4]">Streaming draft · Final status and usage appear when the turn is saved.</p></div>}<section aria-label="Conversation messages" aria-live="polite" className={aiPanel}>{!messages.length && <p className="text-[#8b9bb4]">Ask a question, inspect selected database metadata, or request a SQL proposal for human review. Only successful provider responses are labelled completed.</p>}{messages.map(message => <article key={message.id} className="space-y-3 border-b border-[#2a3047] pb-4"><h2 className="font-bold">{message.role === "user" ? "You" : "OpenRouter"} · {message.status}</h2><MessageContent content={message.content}/>{message.proposedSql && <div><p className="text-sm text-[#00f0ff]">SQL proposal · Not executed</p><pre className="overflow-auto whitespace-pre-wrap rounded bg-[#131522] p-3 text-sm">{message.proposedSql}</pre><button className={aiButton} onClick={() => sendSQL(message.proposedSql!)}>Review in SQL editor</button></div>}{message.trace.length > 0 && <details><summary>Tool activity ({message.trace.length})</summary><ul className="text-xs">{message.trace.map((t, i) => <li key={i}>{t.tool} · {t.status} · {t.elapsedMs} ms</li>)}</ul></details>}{message.usage && <p className="text-xs text-[#8b9bb4]">Usage: {message.usage.promptTokens} input + {message.usage.completionTokens} output = {message.usage.totalTokens} tokens</p>}{message.errorCode && <p className="text-xs text-[#ff8da8]">{message.errorCode}</p>}</article>)}</section>
       <form onSubmit={send} className={aiPanel}><label htmlFor="ai-message">Message</label><textarea id="ai-message" rows={4} maxLength={6000} className={aiInput} value={content} disabled={busy} onChange={e => setContent(e.target.value)}/><div className="flex flex-wrap gap-3"><button className={aiButton} disabled={busy || !workspaceId || !content.trim() || !provider.state?.configured || !provider.state.storageConfigured || !(current?.model || model || provider.state.defaultModel)}>{busy ? "Waiting for OpenRouter…" : "Send"}</button>{busy && <button type="button" className={aiButton} onClick={() => controller.current?.abort()}>Cancel request</button>}{current && <button type="button" className={aiButton} disabled={busy} onClick={() => void open(current.id)}>Reload conversation</button>}</div><p className="text-xs text-[#8b9bb4]">OpenRouter output streams when available. Cancellation is forwarded to the provider when the server receives the abort; usage may still be billed.</p></form>
     </div></div>;
 }

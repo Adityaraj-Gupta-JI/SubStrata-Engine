@@ -9,7 +9,7 @@ import { WorkspaceSelectionContext, type SqlDraft } from "./DatabaseWorkspace";
 import { browserSelectionStorage, readWorkspaceSelection, saveWorkspaceSelection } from "@/lib/workspace-selection";
 
 const groups = [
-  { label: "Workspace", links: [["Dashboard", "/dashboard"], ["AI chat", "/chat"], ["Databases", "/databases"], ["SQL editor", "/sql-editor"], ["Explorer", "/explorer"], ["Agent runs", "/agents"]] },
+  { label: "Workspace", links: [["Dashboard", "/dashboard"], ["Get started", "/onboarding"], ["AI chat", "/chat"], ["Databases", "/databases"], ["SQL editor", "/sql-editor"], ["Explorer", "/explorer"], ["Agent runs", "/agents"]] },
   { label: "Settings", links: [["AI settings", "/settings/ai"], ["Access control", "/settings/access"], ["Account", "/settings/account"]] },
 ] as const;
 
@@ -72,6 +72,12 @@ export function WorkspaceShell({ children }: { children: ReactNode }) {
     if (userId && organizationId && workspaceId) saveWorkspaceSelection(browserSelectionStorage(), userId, { organizationId, workspaceId, databaseId });
   }, [userId, organizationId, workspaceId, databaseId]);
 
+  useEffect(()=>{
+    const focusWorkspace=()=>{if(window.location.hash!=="#workspace-select")return;setOpen(true);requestAnimationFrame(()=>document.getElementById("workspace-select")?.focus());};
+    focusWorkspace();window.addEventListener("hashchange",focusWorkspace);
+    return()=>window.removeEventListener("hashchange",focusWorkspace);
+  },[pathname]);
+
   async function createMetadata(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!create || saving || (create === "workspace" && !organizationId)) return;
@@ -104,7 +110,7 @@ export function WorkspaceShell({ children }: { children: ReactNode }) {
     <div className="min-h-screen bg-[#07080c] text-[#e0e6ed] lg:flex">
       <a href="#main-content" className="sr-only focus:not-sr-only focus:absolute focus:z-50 focus:bg-white focus:p-3 focus:text-black">Skip to content</a>
       <header className="flex items-center justify-between border-b border-[#2a3047] bg-[#0d0e17] p-4 lg:hidden">
-        <Link href="/dashboard" className="font-bold text-[#ff0055]">SUBSTRATA</Link>
+        <Link href="/dashboard" className="font-bold text-[#ff0055]">SUBSTRATA</Link><UserButton />
         <button type="button" aria-expanded={open} aria-controls="workspace-nav" onClick={() => setOpen(!open)} className="rounded border border-[#2a3047] px-3 py-1">{open ? "Close" : "Menu"}</button>
       </header>
       <aside id="workspace-nav" className={`${open ? "block" : "hidden"} border-r border-[#2a3047] bg-[#0d0e17] p-5 lg:block lg:min-h-screen lg:w-64 lg:shrink-0`}>
@@ -127,7 +133,7 @@ export function WorkspaceShell({ children }: { children: ReactNode }) {
             <button type="button" disabled={saving} onClick={() => setCreate(null)} className="underline">Cancel</button>
           </form>}
           <label className="block text-[#8b9bb4]" htmlFor="workspace-select">WORKSPACE</label>
-          <select id="workspace-select" value={workspaceId} onChange={event => { setWorkspaceId(event.target.value); setDatabaseId(""); }} className="w-full bg-[#0d0e17] p-2 text-white" disabled={!workspaces.length}>
+          <select id="workspace-select" tabIndex={0} value={workspaceId} onChange={event => { setWorkspaceId(event.target.value); setDatabaseId(""); }} className="w-full bg-[#0d0e17] p-2 text-white" disabled={!workspaces.length}>
             {!workspaces.length && <option value="">None available</option>}
             {workspaces.map(workspace => <option key={workspace.id} value={workspace.id}>{workspace.name}</option>)}
           </select>

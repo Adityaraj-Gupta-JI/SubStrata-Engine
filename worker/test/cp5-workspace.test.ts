@@ -1,3 +1,6 @@
+import {cp5Api} from "../../frontend/src/lib/api/cp5";
+import {aiApi} from "../../frontend/src/lib/api/ai";
+import {recordLink} from "../../frontend/src/lib/product-workflow";
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { Miniflare, convertV4MiniflareOptions } from 'miniflare';
 import { readFileSync } from 'node:fs';
@@ -97,6 +100,20 @@ describe('Agents: real D1 persistence, mocked Clerk/provider/SQL', () => {
     it('validates limits and scopes definitions to their owner and workspace', async () => { for (const change of [{ maxSteps: 0 }, { maxSteps: 9 }, { deadlineSeconds: 0 }, { deadlineSeconds: 121 }, { template: 'admin' }, { databaseId: 'f'.repeat(32) }])
         expect((await call(path() + '/agents', 'POST', { ...config, ...change })).status).toBe(change.databaseId ? 404 : 400); const r = await call(path() + '/agents', 'POST', config); expect(r.status).toBe(201); agent = (await body(r)).data.id; expect((await body(await call(path() + '/agents'))).data).toHaveLength(1); expect((await body(await call(path() + '/agents', 'GET', undefined, '1'))).data).toHaveLength(0); expect((await call(path(wb) + `/agents/${agent}`, 'POST', config)).status).toBe(404); expect((await call(path() + `/agents/${agent}`, 'POST', config, '1')).status).toBe(404); });
     it('persists model steps, usage, final status and run history', async () => { mode = 'normal'; calls = 0; const response = await call(path() + `/agents/${agent}/run`, 'POST', { goal: 'Explain selected schema' }); expect(response.headers.get('Content-Type')).toBe('text/event-stream'); const text = await response.text(); expect(text).toContain('event: complete'); expect(text).not.toContain(secret); expect(calls).toBe(1); const list = (await body(await call(path() + '/agent-runs'))).data; expect(list[0].status).toBe('completed'); const detail = (await body(await call(path() + `/agent-runs/${list[0].id}`))).data; expect(detail.steps.some((s: any) => s.kind === 'model')).toBe(true); expect(detail.run.usage.totalTokens).toBe(3); expect(detail.messages.at(-1).content).toBe('Fixture answer'); expect((await call(path() + `/agent-runs/${list[0].id}`, 'GET', undefined, '1')).status).toBe(404); expect((await call(path(wb) + `/agent-runs/${list[0].id}`)).status).toBe(404); });
+    it('uses the frontend agent stream, dashboard history link and original conversation contracts',async()=>{
+        const previous=process.env.NEXT_PUBLIC_PLATFORM_API_URL;process.env.NEXT_PUBLIC_PLATFORM_API_URL='https://local.test';
+        vi.stubGlobal('fetch',(input:string,init:RequestInit)=>handler()(new Request(input,init),env));
+        try{
+            mode='normal';const events:string[]=[],deltas:string[]=[];
+            const result=await cp5Api.runAgent(wa,'0',agent,'CP7 trace journey',delta=>deltas.push(delta),new AbortController().signal,type=>events.push(type));
+            expect(result.status).toBe('completed');expect(events).toContain('step');expect(deltas.join('')).toContain('Fixture answer');
+            const history=(await cp5Api.runs(wa,'0')).data;expect(history.some(r=>r.id===result.runId)).toBe(true);
+            const link=recordLink('/agents','run',result.runId),id=new URLSearchParams(link.split('#')[1]).get('run')!;
+            const detail=(await cp5Api.run(wa,'0',id)).data;expect(detail.steps.length).toBeGreaterThan(0);expect(detail.run.usage?.totalTokens).toBe(3);
+            const conversation=(await aiApi.get(wa,detail.run.conversationId,'0')).data;expect(conversation.messages.at(-1)?.content).toBe('Fixture answer');
+            await expect(cp5Api.run(wa,'1',id)).rejects.toMatchObject({status:404});
+        }finally{vi.unstubAllGlobals();if(previous===undefined)delete process.env.NEXT_PUBLIC_PLATFORM_API_URL;else process.env.NEXT_PUBLIC_PLATFORM_API_URL=previous;}
+    });
     it('enforces bounded loops and records tool traces', async () => { mode = 'loop'; calls = 0; const response = await call(path() + `/agents/${agent}/run`, 'POST', { goal: 'Loop fixture' }); await response.text(); expect(calls).toBe(2); const row = (await body(await call(path() + '/agent-runs'))).data[0]; expect(row.status).toBe('failed'); expect(row.errorCode).toBe('AI_TOOL_LIMIT'); const detail = (await body(await call(path() + `/agent-runs/${row.id}`))).data; expect(detail.steps.filter((s: any) => s.kind === 'model')).toHaveLength(2); expect(detail.steps.some((s: any) => s.kind === 'tool')).toBe(true); mode = 'normal'; });
     it('cancels before further tool/model execution and persists cancellation', async () => { mode = 'normal'; calls = 0; afterModel = async () => { const current = (await body(await call(path() + '/agent-runs'))).data[0]; expect((await call(path() + `/agent-runs/${current.id}/cancel`, 'POST', {})).status).toBe(200); }; await (await call(path() + `/agents/${agent}/run`, 'POST', { goal: 'Cancel fixture' })).text(); afterModel = null; const current = (await body(await call(path() + '/agent-runs'))).data[0]; expect(current.status).toBe('cancelled'); expect(calls).toBe(1); });
     it('validates tool arguments, template allowlists, row opt-in and cross-workspace access', async () => { const tools = new AuthorizedAITools(env, { transport }, { workspaceId: wa, userId: users[0], databaseId: null, allowRows: false }, 'test', { allowed: ['list_databases', 'preview_table'] }); transport.read.mockClear(); for (const [name, args] of [['execute_sql', '{}'], ['list_databases', JSON.stringify({ workspaceId: wb })], ['preview_table', JSON.stringify({ table: 'x' })], ['list_tables', '{}']])
