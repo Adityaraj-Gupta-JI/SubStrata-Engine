@@ -1,2 +1,2 @@
-import {AccessWorkspace} from "@/components/ProductPages";
-export default function Page(){return <AccessWorkspace/>;}
+import {WorkspaceMembers} from "@/components/WorkspaceMembers";
+export default function Page(){return <WorkspaceMembers/>;}

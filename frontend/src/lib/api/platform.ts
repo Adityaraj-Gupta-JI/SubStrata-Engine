@@ -65,7 +65,7 @@ export function platformPost<T>(path: string, token: string, payload: unknown, s
 }
 
 // Streaming uses the same origin and authenticated request contract as JSON calls.
-export async function platformStream<T>(path:string,token:string,payload:unknown,onDelta:(text:string)=>void,signal?:AbortSignal):Promise<T>{
+export async function platformStream<T>(path:string,token:string,payload:unknown,onDelta:(text:string)=>void,signal?:AbortSignal,onEvent?:(type:string,data:unknown)=>void):Promise<T>{
   let reader:ReadableStreamDefaultReader<Uint8Array>|undefined;
   try{
     const response=await fetch(`${platformOrigin()}/api/v1${path}`,{method:"POST",headers:{Authorization:`Bearer ${token}`,"Content-Type":"application/json"},cache:"no-store",signal,body:JSON.stringify(payload)});
@@ -75,6 +75,7 @@ export async function platformStream<T>(path:string,token:string,payload:unknown
     const decoder=new TextDecoder();let buffer="",size=0;
     for(;;){const part=await reader.read();if(part.done)break;size+=part.value.length;if(size>4000000)throw new PlatformApiError(502,"STREAM_LIMIT","AI response exceeded the stream limit.");buffer=(buffer+decoder.decode(part.value,{stream:true})).replace(/\r\n/g,"\n");let boundary:number;
       while((boundary=buffer.indexOf("\n\n"))>=0){const frame=buffer.slice(0,boundary);buffer=buffer.slice(boundary+2);const type=frame.split("\n").find(line=>line.startsWith("event:"))?.slice(6).trim(),raw=frame.split("\n").filter(line=>line.startsWith("data:")).map(line=>line.slice(5).trimStart()).join("\n");if(!raw)continue;const data=JSON.parse(raw);
+        if(type)onEvent?.(type,data);
         if(type==="delta"&&typeof data.text==="string")onDelta(data.text);
         if(type==="complete")return data as T;
         if(type==="error")throw new PlatformApiError(502,data.code??"AI_UNAVAILABLE",data.message??"AI request failed.");

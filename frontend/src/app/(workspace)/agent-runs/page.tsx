@@ -1,2 +1,2 @@
-import {AgentRunsWorkspace} from "@/components/ProductPages";
-export default function Page(){return <AgentRunsWorkspace/>;}
+import {AgentsWorkspace} from "@/components/AgentsWorkspace";
+export default function Page(){return <AgentsWorkspace/>;}

@@ -1,6 +1,6 @@
 import { platformGet, platformPost } from "./platform";
 
-export interface TenantDatabase { id: string; workspaceId: string; name: string; state: string; retryAvailable: boolean; error: string | null }
+export interface TenantDatabase {kind?:"managed"|"external";schema?:string; id: string; workspaceId: string; name: string; state: string; retryAvailable: boolean; error: string | null }
 export interface DatabaseList { data: TenantDatabase[]; capabilities: { canRead: boolean; canProvision: boolean; provisioningConfigured: boolean } }
 export interface ResultGrid { columns: string[]; rows: Record<string, unknown>[]; truncated: boolean; elapsedMs: number }
 export interface RowPreview extends ResultGrid { page: { limit: number; offset: number }; stableOrder: boolean; hasMore: boolean }

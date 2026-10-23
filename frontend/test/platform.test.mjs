@@ -90,3 +90,34 @@ test("surfaces structured unauthorized errors without pretending the request suc
   globalThis.fetch = async () => new Response(JSON.stringify({ error: { code: "UNAUTHENTICATED", message: "Authentication required.", requestId: "r1" } }), { status: 401 });
   await assert.rejects(platformGet("/auth/session", "invalid"), error => error instanceof PlatformApiError && error.status === 401 && error.code === "UNAUTHENTICATED");
 });
+
+// Agent progress uses the same authenticated SSE transport as chat.
+test("streams persisted agent identity, ordered steps and completion without inventing success", async () => {
+  const { platformStream } = await import("../src/lib/api/platform.ts");
+  process.env.NEXT_PUBLIC_PLATFORM_API_URL = "https://api.example.test";
+  const events = [], chunks = [];
+  globalThis.fetch = async (url, options) => {
+    assert.equal(options.headers.Authorization, "Bearer session");
+    assert.equal(options.cache, "no-store");
+    assert.deepEqual(JSON.parse(options.body), { goal: "Inspect schema" });
+    const frames = [
+      ["status", { runId: "persisted-run", status: "running" }],
+      ["step", { sequence: 1, kind: "tool", name: "list_tables", status: "success" }],
+      ["delta", { text: "Actual streamed text" }],
+      ["complete", { runId: "persisted-run", status: "completed", messages: [] }],
+    ];
+    return new Response(frames.map(([name, data]) => `event: ${name}\ndata: ${JSON.stringify(data)}\n\n`).join(""), { headers: { "Content-Type": "text/event-stream" } });
+  };
+  const result = await platformStream("/workspaces/w/agents/a/run", "session", { goal: "Inspect schema" }, text => chunks.push(text), undefined, (name, data) => events.push([name, data]));
+  assert.deepEqual(chunks, ["Actual streamed text"]);
+  assert.deepEqual(events.map(([name]) => name), ["status", "step", "delta", "complete"]);
+  assert.equal(result.runId, "persisted-run");
+  assert.equal(result.status, "completed");
+});
+
+test("does not turn an interrupted agent stream into a completed execution", async () => {
+  const { platformStream } = await import("../src/lib/api/platform.ts");
+  process.env.NEXT_PUBLIC_PLATFORM_API_URL = "https://api.example.test";
+  globalThis.fetch = async () => new Response('event: status\ndata: {"runId":"r","status":"running"}\n\n', { headers: { "Content-Type": "text/event-stream" } });
+  await assert.rejects(platformStream("/workspaces/w/agents/a/run", "session", { goal: "Inspect" }, () => {}), error => error.code === "STREAM_INTERRUPTED");
+});

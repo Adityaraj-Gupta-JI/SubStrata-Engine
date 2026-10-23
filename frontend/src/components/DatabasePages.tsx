@@ -1,4 +1,5 @@
 "use client";
+import {ExternalConnections} from "./ExternalConnections";
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { databaseApi, type RelationMetadata, type ResultGrid, type RowPreview } from "@/lib/api/databases";
@@ -35,7 +36,7 @@ export function DatabasesWorkspace() {
 
       <DatabaseSelector workspace={workspace}/>
 
-      <div className="flex flex-wrap gap-3"><button className={button} disabled={!allowed || busy || !!workspace.list?.data.length} onClick={() => void provision()}>{busy ? "Requesting…" : "Create database"}</button><button className={button} disabled={!workspace.workspaceId || workspace.loading || busy} onClick={() => void workspace.refresh()}>Refresh status</button></div>
+      <div className="flex flex-wrap gap-3"><button className={button} disabled={!allowed || busy || !!workspace.list?.data.some(d=>d.kind!=="external")} onClick={() => void provision()}>{busy ? "Requesting…" : "Create database"}</button><button className={button} disabled={!workspace.workspaceId || workspace.loading || busy} onClick={() => void workspace.refresh()}>Refresh status</button></div>
 
       {workspace.list && !workspace.list.capabilities.provisioningConfigured && <p role="status" className="text-sm text-[#8b9bb4]">Provisioning is not configured. A managed provider and durable external credential storage are required.</p>}
 
@@ -47,7 +48,7 @@ export function DatabasesWorkspace() {
 
     </div>
 
-  </RouteShell>;
+  <ExternalConnections workspace={workspace}/></RouteShell>;
 }
 export function ExplorerWorkspace() {
     const workspace = useDatabaseWorkspace();
@@ -196,5 +197,5 @@ function SqlDatabase({ workspace }: {
                 setRunning(false);
         }
     }
-    return <div className={panel}>{generated && <p role="status" className="text-[#00f0ff]">{executed ? "AI-generated SQL · Executed through the read-only gateway." : "AI-generated draft · Not executed. Review and edit before executing."}</p>}<p className="text-sm text-[#8b9bb4]">Single SELECT over a schema-qualified tenant_data relation. Basic filters, ordering, limits and count/min/max/sum/avg are supported. Maximum 100 rows, 64 KiB of cell data and a 3-second statement timeout.</p><label htmlFor="readonly-sql" className="block font-bold">Read-only SQL</label><textarea id="readonly-sql" rows={8} maxLength={8192} className="w-full rounded border border-[#2a3047] bg-[#131522] p-3 font-mono text-sm" placeholder="SELECT * FROM tenant_data.your_table LIMIT 20" value={sql} onChange={event => { setSql(event.target.value); setExecuted(false); setResult(null); }} spellCheck={false}/><button className={button} disabled={running || !sql.trim() || workspace.database?.state !== "active"} onClick={() => void execute()}>{running ? "Executing…" : "Execute read-only query"}</button>{!workspace.database && <p role="status">Select an active database to execute.</p>}{running && <p role="status">Running bounded read-only query…</p>}{error && <p role="alert" className="text-[#ff8da8]">{error}</p>}{result && <ResultTable result={result}/>}<SQLAssistance workspace={workspace} onDraft={value => { setSql(value); setGenerated(true); setExecuted(false); setResult(null); }}/></div>;
+    return <div className={panel}>{generated && <p role="status" className="text-[#00f0ff]">{executed ? "AI-generated SQL · Executed through the read-only gateway." : "AI-generated draft · Not executed. Review and edit before executing."}</p>}<p className="text-sm text-[#8b9bb4]">Single SELECT over the selected database’s approved schema. Basic filters, ordering, limits and count/min/max/sum/avg are supported. Maximum 100 rows, 64 KiB of cell data and a 3-second statement timeout.</p><label htmlFor="readonly-sql" className="block font-bold">Read-only SQL</label><textarea id="readonly-sql" rows={8} maxLength={8192} className="w-full rounded border border-[#2a3047] bg-[#131522] p-3 font-mono text-sm" placeholder={`SELECT * FROM ${workspace.database?.schema??"tenant_data"}.your_table LIMIT 20`} value={sql} onChange={event => { setSql(event.target.value); setExecuted(false); setResult(null); }} spellCheck={false}/><button className={button} disabled={running || !sql.trim() || workspace.database?.state !== "active"} onClick={() => void execute()}>{running ? "Executing…" : "Execute read-only query"}</button>{!workspace.database && <p role="status">Select an active database to execute.</p>}{running && <p role="status">Running bounded read-only query…</p>}{error && <p role="alert" className="text-[#ff8da8]">{error}</p>}{result && <ResultTable result={result}/>}<SQLAssistance workspace={workspace} onDraft={value => { setSql(value); setGenerated(true); setExecuted(false); setResult(null); }}/></div>;
 }
