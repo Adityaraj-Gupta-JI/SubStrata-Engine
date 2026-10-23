@@ -1,10 +1,10 @@
 import { platformGet, platformPost } from "./platform";
 
-export interface TenantDatabase {kind?:"managed"|"external";schema?:string; id: string; workspaceId: string; name: string; state: string; retryAvailable: boolean; error: string | null }
+export interface TenantDatabase {dialect?:"postgresql"|"mysql";kind?:"managed"|"external";schema?:string; id: string; workspaceId: string; name: string; state: string; retryAvailable: boolean; error: string | null }
 export interface DatabaseList { data: TenantDatabase[]; capabilities: { canRead: boolean; canProvision: boolean; provisioningConfigured: boolean } }
 export interface ResultGrid { columns: string[]; rows: Record<string, unknown>[]; truncated: boolean; elapsedMs: number }
 export interface RowPreview extends ResultGrid { page: { limit: number; offset: number }; stableOrder: boolean; hasMore: boolean }
-export interface RelationMetadata { columns: { name: string; type: string; not_null: string }[]; keys: { name: string; type: string; definition: string }[]; indexes: { name: string; definition: string }[] }
+export interface RelationMetadata { primaryKey?:string[]; columns: { name: string; type: string; not_null: string;has_default?:string }[]; keys: { name: string; type: string; definition: string }[]; indexes: { name: string; definition: string }[] }
 const root = (workspace: string) => `/workspaces/${encodeURIComponent(workspace)}/databases`;
 const selected = (workspace: string, database: string) => `${root(workspace)}/${encodeURIComponent(database)}`;
 export const databaseApi = {

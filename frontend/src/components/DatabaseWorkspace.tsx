@@ -39,7 +39,7 @@ export function DatabaseSelector({ workspace }: { workspace: ReturnType<typeof u
     <label htmlFor="database-selector" className="block text-sm">Database</label>
     <select id="database-selector" className="w-full rounded border border-[#2a3047] bg-[#131522] p-2" value={workspace.databaseId} disabled={workspace.loading || !workspace.list?.data.length} onChange={event => workspace.setDatabaseId(event.target.value)}>
       <option value="">Select a database</option>
-      {workspace.list?.data.map(database => <option key={database.id} value={database.id}>{database.name} — {database.kind==='external'?'External PostgreSQL':'Managed Neon'} — {database.state}</option>)}
+      {workspace.list?.data.map(database => <option key={database.id} value={database.id}>{database.name} — {database.kind==='external'?database.dialect==='mysql'?'External MySQL':'External PostgreSQL':'Managed Neon'} — {database.state}</option>)}
     </select>
     {!workspace.workspaceId && <p role="status">Select a workspace in the sidebar.</p>}
     {workspace.loading && <p role="status">Loading databases…</p>}

@@ -1,4 +1,7 @@
 "use client";
+import {SchemaEditor,RecordEditor} from "./DatabaseEditors";
+import {ApprovedChange,ExecutionSettings} from "./ApprovedChange";
+import {MySQLConnections} from "./MySQLConnections";
 import {ExternalConnections} from "./ExternalConnections";
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
@@ -34,7 +37,7 @@ export function DatabasesWorkspace() {
 
     <div className={panel}>
 
-      <DatabaseSelector workspace={workspace}/>
+      <DatabaseSelector workspace={workspace}/><ExecutionSettings key={workspace.databaseId} workspace={workspace}/>
 
       <div className="flex flex-wrap gap-3"><button className={button} disabled={!allowed || busy || !!workspace.list?.data.some(d=>d.kind!=="external")} onClick={() => void provision()}>{busy ? "Requesting…" : "Create database"}</button><button className={button} disabled={!workspace.workspaceId || workspace.loading || busy} onClick={() => void workspace.refresh()}>Refresh status</button></div>
 
@@ -48,7 +51,7 @@ export function DatabasesWorkspace() {
 
     </div>
 
-  <ExternalConnections workspace={workspace}/></RouteShell>;
+  <ExternalConnections workspace={workspace}/><MySQLConnections workspace={workspace}/></RouteShell>;
 }
 export function ExplorerWorkspace() {
     const workspace = useDatabaseWorkspace();
@@ -77,6 +80,7 @@ function ExplorerDatabase({ workspace }: {
     const [metadata, setMetadata] = useState<RelationMetadata | null>(null);
     const [preview, setPreview] = useState<RowPreview | null>(null);
     const [error, setError] = useState("");
+    const [notice,setNotice]=useState("");
     const [loading, setLoading] = useState(true);
     const generation = useRef({ value: 0 });
     const { workspaceId, databaseId, token } = workspace;
@@ -151,15 +155,15 @@ function ExplorerDatabase({ workspace }: {
 
     <nav aria-label="Database schema tree" className={panel}><h2 className="font-bold">Schemas</h2>{!schemas.length && !error && !loading && <p role="status">No readable schemas returned.</p>}{schemas.map(item => <div key={item.name}><button className={button} aria-expanded={schema === item.name} onClick={() => void openSchema(item.name)}>{item.name}</button>{schema === item.name && <ul className="mt-2 space-y-2 pl-3">{tables.map(item => <li key={item.name}><button className={`${button} break-all text-left`} aria-current={table === item.name ? "true" : undefined} onClick={() => void openTable(item.name)}>{item.name} <span className="text-[#8b9bb4]">({item.kind})</span></button></li>)}{!loading && !tables.length && <li>No readable tables or views.</li>}</ul>}</div>)}</nav>
 
-    <div className={`${panel} min-w-0`}>{loading && <p role="status">Loading relation…</p>}{error && <p role="alert" className="text-[#ff8da8]">{error}</p>}{!table && <p>Select a schema and table or view.</p>}{metadata && <><h2 className="break-all text-lg font-bold">{schema}.{table}</h2><h3 className="font-bold">Columns</h3><ul className="space-y-1 text-sm">{metadata.columns.map(column => <li key={column.name}>{column.name} · {column.type}{column.not_null === "true" ? " · NOT NULL" : ""}</li>)}</ul><details><summary>Keys and indexes</summary><ul className="space-y-2 break-words pt-2 text-sm">{[...metadata.keys, ...metadata.indexes].map(item => <li key={item.name}><strong>{item.name}</strong>: {item.definition}</li>)}</ul></details></>}{preview && <><h3 className="font-bold">Read-only preview</h3><ResultTable result={preview}/>{!preview.stableOrder && <p className="text-sm text-[#8b9bb4]">No primary key: page order may change. Offset pages are not snapshots.</p>}<div className="flex gap-3"><button className={button} disabled={loading || preview.page.offset === 0} onClick={() => void openTable(table, Math.max(0, preview.page.offset - 20))}>Previous</button><span className="py-2 text-sm">Offset {preview.page.offset}</span><button className={button} disabled={loading || !preview.hasMore || preview.page.offset >= 10000} onClick={() => void openTable(table, preview.page.offset + 20)}>Next</button></div></>}</div>
+    <div className={`${panel} min-w-0`}>{notice&&<p role="status">{notice}</p>}{schema&&<SchemaEditor key={`${schema}:${table}`} workspace={workspace} schema={schema} table={table} onCommitted={()=>{setNotice("Schema change committed. Refreshing the schema tree.");void openSchema(schema);}}/>}{loading && <p role="status">Loading relation…</p>}{error && <p role="alert" className="text-[#ff8da8]">{error}</p>}{!table && <p>Select a schema and table or view.</p>}{metadata && <><h2 className="break-all text-lg font-bold">{schema}.{table}</h2><h3 className="font-bold">Columns</h3><ul className="space-y-1 text-sm">{metadata.columns.map(column => <li key={column.name}>{column.name} · {column.type}{column.not_null === "true" ? " · NOT NULL" : ""}</li>)}</ul><details><summary>Keys and indexes</summary><ul className="space-y-2 break-words pt-2 text-sm">{[...metadata.keys, ...metadata.indexes].map(item => <li key={item.name}><strong>{item.name}</strong>: {item.definition}</li>)}</ul></details></>}{preview && <><h3 className="font-bold">Paginated records</h3>{metadata&&<RecordEditor key={`${schema}:${table}:${preview.page.offset}`} workspace={workspace} schema={schema} table={table} metadata={metadata} preview={preview} onCommitted={()=>{setNotice("Record change committed. Refreshing the page.");void openTable(table,preview.page.offset);}}/>}<ResultTable result={preview}/>{!preview.stableOrder && <p className="text-sm text-[#8b9bb4]">No primary key: page order may change. Offset pages are not snapshots.</p>}<div className="flex gap-3"><button className={button} disabled={loading || preview.page.offset === 0} onClick={() => void openTable(table, Math.max(0, preview.page.offset - 20))}>Previous</button><span className="py-2 text-sm">Offset {preview.page.offset}</span><button className={button} disabled={loading || !preview.hasMore || preview.page.offset >= 10000} onClick={() => void openTable(table, preview.page.offset + 20)}>Next</button></div></>}</div>
 
   </div>;
 }
 export function SqlWorkspace() {
     const workspace = useDatabaseWorkspace();
-    return <RouteShell title="SQL editor" description="Read-only SELECT queries. No writes, DDL, CTEs, joins, subqueries or administrative functions.">
+    return <RouteShell title="SQL editor" description="Run bounded SELECT queries or preview explicitly approved PostgreSQL changes. MySQL remains read-only.">
 
-    <div className={panel}><DatabaseSelector workspace={workspace}/></div>
+    <div className={panel}><DatabaseSelector workspace={workspace}/></div><ExecutionSettings key={workspace.databaseId} workspace={workspace}/>
 
     <SqlDatabase key={`${workspace.workspaceId}:${workspace.databaseId}`} workspace={workspace}/>
 
@@ -197,5 +201,5 @@ function SqlDatabase({ workspace }: {
                 setRunning(false);
         }
     }
-    return <div className={panel}>{generated && <p role="status" className="text-[#00f0ff]">{executed ? "AI-generated SQL · Executed through the read-only gateway." : "AI-generated draft · Not executed. Review and edit before executing."}</p>}<p className="text-sm text-[#8b9bb4]">Single SELECT over the selected database’s approved schema. Basic filters, ordering, limits and count/min/max/sum/avg are supported. Maximum 100 rows, 64 KiB of cell data and a 3-second statement timeout.</p><label htmlFor="readonly-sql" className="block font-bold">Read-only SQL</label><textarea id="readonly-sql" rows={8} maxLength={8192} className="w-full rounded border border-[#2a3047] bg-[#131522] p-3 font-mono text-sm" placeholder={`SELECT * FROM ${workspace.database?.schema??"tenant_data"}.your_table LIMIT 20`} value={sql} onChange={event => { setSql(event.target.value); setExecuted(false); setResult(null); }} spellCheck={false}/><button className={button} disabled={running || !sql.trim() || workspace.database?.state !== "active"} onClick={() => void execute()}>{running ? "Executing…" : "Execute read-only query"}</button>{!workspace.database && <p role="status">Select an active database to execute.</p>}{running && <p role="status">Running bounded read-only query…</p>}{error && <p role="alert" className="text-[#ff8da8]">{error}</p>}{result && <ResultTable result={result}/>}<SQLAssistance workspace={workspace} onDraft={value => { setSql(value); setGenerated(true); setExecuted(false); setResult(null); }}/></div>;
+    return <div className={panel}>{generated && <p role="status" className="text-[#00f0ff]">{executed ? "AI-generated SQL · Executed through the read-only gateway." : "AI-generated draft · Not executed. Review and edit before executing."}</p>}<p className="text-sm text-[#8b9bb4]">Single SELECT over the selected database’s approved schema. Basic filters, ordering, limits and count/min/max/sum/avg are supported. Maximum 100 rows, 64 KiB of cell data and a 3-second statement timeout.</p><label htmlFor="readonly-sql" className="block font-bold">SQL · {workspace.database?.dialect??"postgresql"}</label><textarea id="readonly-sql" rows={8} maxLength={8192} className="w-full rounded border border-[#2a3047] bg-[#131522] p-3 font-mono text-sm" placeholder={`SELECT * FROM ${workspace.database?.schema??"tenant_data"}.your_table LIMIT 20`} value={sql} onChange={event => { setSql(event.target.value); setExecuted(false); setResult(null); }} spellCheck={false}/><button className={button} disabled={running || !sql.trim() || workspace.database?.state !== "active"} onClick={() => void execute()}>{running ? "Executing…" : "Run SELECT"}</button>{!workspace.database && <p role="status">Select an active database to execute.</p>}{running && <p role="status">Running bounded read-only query…</p>}{error && <p role="alert" className="text-[#ff8da8]">{error}</p>}{result && <ResultTable result={result}/>}<ApprovedChange workspace={workspace} sql={sql} onCommitted={()=>{setGenerated(false);setExecuted(false);}}/><SQLAssistance workspace={workspace} onDraft={value => { setSql(value); setGenerated(true); setExecuted(false); setResult(null); }}/></div>;
 }
