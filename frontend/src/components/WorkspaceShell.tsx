@@ -5,17 +5,18 @@ import { usePathname } from "next/navigation";
 import { useAuth, UserButton } from "@clerk/nextjs";
 import { useEffect, useState, type FormEvent, type ReactNode } from "react";
 import { platformGet, platformPost, platformToken, type Organization, type Page, type Session, type Workspace } from "@/lib/api/platform";
-import { WorkspaceSelectionContext } from "./DatabaseWorkspace";
+import { WorkspaceSelectionContext, type SqlDraft } from "./DatabaseWorkspace";
 import { browserSelectionStorage, readWorkspaceSelection, saveWorkspaceSelection } from "@/lib/workspace-selection";
 
 const groups = [
-  { label: "Workspace", links: [["Dashboard", "/dashboard"], ["AI chat", "/ai-chat"], ["Databases", "/databases"], ["SQL editor", "/sql-editor"], ["Explorer", "/explorer"], ["Agent runs", "/agent-runs"]] },
-  { label: "Settings", links: [["AI settings", "/settings/ai"], ["Access control", "/settings/access-control"], ["Account", "/settings/account"]] },
+  { label: "Workspace", links: [["Dashboard", "/dashboard"], ["AI chat", "/chat"], ["Databases", "/databases"], ["SQL editor", "/sql-editor"], ["Explorer", "/explorer"], ["Agent runs", "/agents"]] },
+  { label: "Settings", links: [["AI settings", "/settings/ai"], ["Access control", "/settings/access"], ["Account", "/settings/account"]] },
 ] as const;
 
 export function WorkspaceShell({ children }: { children: ReactNode }) {
   const pathname = usePathname();
   const [open, setOpen] = useState(false);
+  const [sqlDraft,setSqlDraft] = useState<SqlDraft|null>(null);
   const { isLoaded, isSignedIn, getToken, userId } = useAuth();
   const [organizations, setOrganizations] = useState<Organization[]>([]);
   const [workspaces, setWorkspaces] = useState<Workspace[]>([]);
@@ -141,7 +142,7 @@ export function WorkspaceShell({ children }: { children: ReactNode }) {
       </aside>
       <div className="min-w-0 flex-1">
         <div className="hidden items-center justify-between border-b border-[#2a3047] bg-[#0d0e17] px-6 py-4 lg:flex"><span className="text-sm font-bold">Database workspace</span><UserButton /></div>
-        <main id="main-content" className="min-w-0 p-4 md:p-6"><WorkspaceSelectionContext.Provider value={{ workspaceId, databaseId, setDatabaseId }}>{children}</WorkspaceSelectionContext.Provider></main>
+        <main id="main-content" className="min-w-0 p-4 md:p-6"><WorkspaceSelectionContext.Provider value={{ workspaceId, databaseId, setDatabaseId, sqlDraft, setSqlDraft }}>{children}</WorkspaceSelectionContext.Provider></main>
       </div>
     </div>
   );

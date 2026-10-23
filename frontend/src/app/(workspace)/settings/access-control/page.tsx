@@ -1,2 +1,2 @@
-import { RouteShell } from "@/components/RouteShell";
-export default function AccessControlPage() { return <RouteShell title="Access control" description="Accounts, roles, and tenant permissions are not connected yet." />; }
+import {AccessWorkspace} from "@/components/ProductPages";
+export default function Page(){return <AccessWorkspace/>;}

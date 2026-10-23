@@ -1,3 +1,2 @@
-import WorkspaceDemo from "@/components/WorkspaceDemo";
-
-export default function AiChatPage() { return <WorkspaceDemo />; }
+import {AIChatWorkspace} from "@/components/AIChat";
+export default function Page(){return <AIChatWorkspace/>;}
