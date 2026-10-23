@@ -2,6 +2,7 @@ import { requireRole, workspaceAccess } from "../metadata";
 import { type NeonProvider, ProvisioningError, type RestrictedRoles, type TenantTarget } from "./contracts";
 
 export interface TenantMetadata {
+  kind?: "managed"|"external";schema_name?:string;display_name?:string;
   id: string; workspace_id: string; organization_id: string; project_id: string; branch_id: string;
   database_name: string; runtime_role: string; credential_reference: string;
   state: "pending" | "database_pending" | "role_pending" | "validating" | "active" | "failed";

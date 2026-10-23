@@ -6,13 +6,15 @@ export interface ConversationRow {
     workspace_id: string;
     user_id: string;
     database_id: string | null;
+    external_database_id?:string|null;
     title: string;
     model: string;
     busy_id: string | null;
     allow_rows: number;
     updated_at: string;
 }
-export const publicConversation = (row: ConversationRow): Conversation => ({ id: row.id, workspaceId: row.workspace_id, databaseId: row.database_id, title: row.title, model: row.model, busy: !!row.busy_id, updatedAt: row.updated_at });
+export const conversationDatabase=(row:ConversationRow)=>row.database_id??row.external_database_id??null;
+export const publicConversation = (row: ConversationRow): Conversation => ({ id: row.id, workspaceId: row.workspace_id, databaseId: conversationDatabase(row), title: row.title, model: row.model, busy: !!row.busy_id, updatedAt: row.updated_at });
 export async function conversationAccess(db: D1Database, workspace: string, user: string, id: string) {
     await workspaceAccess(db, workspace, user);
     const row = await db.prepare("SELECT * FROM ai_conversations WHERE id=? AND workspace_id=? AND user_id=?").bind(id, workspace, user).first<ConversationRow>();

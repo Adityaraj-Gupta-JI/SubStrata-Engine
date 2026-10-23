@@ -70,3 +70,5 @@ export interface Conversation {
     busy: boolean;
     updatedAt: string;
 }
+
+export interface ExecutionStep {kind:"model"|"tool"|"final";name:string;status:string;elapsedMs:number;usage?:Usage|null;errorCode?:string}

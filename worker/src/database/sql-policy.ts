@@ -8,7 +8,7 @@ export function quoteIdentifier(value: string): string {
   if (!value || value.includes("\0") || new TextEncoder().encode(value).length > 63) throw badRequest("Invalid database identifier.");
   return `"${value.replaceAll('"', '""')}"`;
 }
-export function approvedSelect(sql: unknown, parameters: unknown = []): { sql: string; parameters: (string | number | boolean | null)[] } {
+export function approvedSelect(sql: unknown, parameters: unknown = [], allowedSchema="tenant_data"): { sql: string; parameters: (string | number | boolean | null)[] } {
   if (typeof sql !== "string" || sql.length > 8192 || !sql.trim() || !Array.isArray(parameters) || parameters.length > 20 ||
       parameters.some(value => !(value === null || typeof value === "boolean" || (typeof value === "number" && Number.isFinite(value)) || (typeof value === "string" && value.length <= 2048)))) {
     throw badRequest("Invalid query or parameters.");
@@ -22,7 +22,7 @@ export function approvedSelect(sql: unknown, parameters: unknown = []): { sql: s
   // accepting parser additions (CTEs, INTO, locks, unions, joins, subqueries, casts).
   if (Object.keys(select).some(key => !["type", "columns", "from", "where", "orderBy", "limit"].includes(key)) || select.from?.length !== 1 || !select.columns?.length || select.columns.length > 50) return reject();
   const from = select.from[0];
-  if (from.type !== "table" || from.join || Object.keys(from).some(key => !["type", "name"].includes(key)) || from.name.schema !== "tenant_data") return reject();
+  if (from.type !== "table" || from.join || Object.keys(from).some(key => !["type", "name"].includes(key)) || from.name.schema !== allowedSchema) return reject();
   quoteIdentifier(from.name.name);
   const expression = (expr: Expr, depth = 0): void => {
     if (depth > 12) return reject();

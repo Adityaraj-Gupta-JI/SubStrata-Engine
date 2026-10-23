@@ -1,3 +1,5 @@
+import {dataSource} from "../database/sources";
+import {workspaceAccess} from "../metadata";
 import { ApiError, badRequest, unavailable } from "../errors";
 import { databaseRoute, type DatabaseServices } from "../database/gateway";
 import { approvedSelect } from "../database/sql-policy";
@@ -14,12 +16,12 @@ export class AuthorizedAITools {
     readonly trace: Trace[] = [];
     proposal: string | null = null;
     private count = 0;
-    constructor(private readonly env: Env, private readonly services: DatabaseServices, private readonly scope: ToolScope, private readonly requestId: string) { }
+    constructor(private readonly env: Env, private readonly services: DatabaseServices, private readonly scope: ToolScope, private readonly requestId: string,private readonly policy:{allowed?:string[];maxTools?:number;check?:()=>Promise<void>;onTool?:(trace:Trace)=>Promise<void>}={}) { }
     async database(action: string, table?: string): Promise<unknown> {
         const suffix = action === "list_databases" ? "" : `/${this.scope.databaseId}/${({ list_schemas: "schemas", list_tables: "tables", describe_table: "relation", preview_table: "rows" } as Record<string, string>)[action]}`;
         if (action !== "list_databases" && !this.scope.databaseId)
             throw new ApiError(409, "AI_DATABASE_REQUIRED", "Select an active database for schema tools.");
-        const params = new URLSearchParams({ schema: "tenant_data", limit: "5", offset: "0", ...(table ? { table } : {}) });
+        const params = new URLSearchParams({ limit: "5", offset: "0", ...(table ? { table } : {}) });
         const response = await databaseRoute(new Request(`https://internal.invalid/api/v1/workspaces/${this.scope.workspaceId}/databases${suffix}?${params}`), this.env, this.scope.userId, this.requestId, this.services);
         if (!response || !response.ok)
             throw unavailable();
@@ -32,9 +34,10 @@ export class AuthorizedAITools {
         const start = Date.now();
         let status: Trace["status"] = "success";
         try {
-            if (++this.count > 6)
+            await this.policy.check?.();
+            if (++this.count > (this.policy.maxTools??6))
                 throw new ApiError(429, "AI_TOOL_LIMIT", "Tool limit reached.");
-            if (!Object.hasOwn(descriptions, name))
+            if (!Object.hasOwn(descriptions, name)||this.policy.allowed&&!this.policy.allowed.includes(name))
                 throw badRequest("Tool is not permitted.");
             if (raw.length > 16000)
                 throw badRequest("Tool arguments are too large.");
@@ -56,7 +59,9 @@ export class AuthorizedAITools {
                 const sql = value.sql as string;
                 if (sql.length > 12000)
                     throw badRequest("SQL proposal is too large.");
-                this.proposal = approvedSelect(sql, []).sql;
+                const access=await workspaceAccess(this.env.METADATA,this.scope.workspaceId,this.scope.userId);
+                const source=await dataSource(this.env.METADATA,this.scope.databaseId,this.scope.workspaceId,access.workspace.organization_id);
+                this.proposal = approvedSelect(sql, [],source.schema_name??"tenant_data").sql;
                 return { sql: this.proposal, executed: false, requiresManualExecution: true };
             }
             if (name === "preview_table" && !this.scope.allowRows)
@@ -70,22 +75,25 @@ export class AuthorizedAITools {
             throw error;
         }
         finally {
-            this.trace.push({ tool: Object.hasOwn(descriptions, name) ? name : "unknown", status, elapsedMs: Date.now() - start });
+            const trace={ tool: Object.hasOwn(descriptions, name) ? name : "unknown", status, elapsedMs: Date.now() - start };
+            this.trace.push(trace);await this.policy.onTool?.(trace);
         }
     }
     async context(): Promise<string> {
         if (!this.scope.databaseId)
             return "No database selected. Database tools requiring a selection are unavailable.";
         try {
+            const schemas=await this.execute("list_schemas","{}") as {name:string}[];
             const tables = await this.execute("list_tables", "{}") as {
                 name: string;
             }[];
             const metadata = [];
             for (const table of tables.slice(0, 3))
                 metadata.push({ table: table.name, description: await this.execute("describe_table", JSON.stringify({ table: table.name })) });
-            return JSON.stringify({ schema: "tenant_data", tables, metadata }).slice(0, 14000);
+            return JSON.stringify({ schemas, tables, metadata }).slice(0, 14000);
         }
-        catch {
+        catch(error) {
+            if(error instanceof ApiError&&["AI_CANCELLED","AGENT_DEADLINE","AI_TRACE_UNAVAILABLE"].includes(error.code))throw error;
             return "Database schema is unavailable. Do not invent tables or claim database access succeeded.";
         }
     }

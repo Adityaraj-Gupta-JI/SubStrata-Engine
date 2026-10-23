@@ -1,3 +1,7 @@
+import {agentRoute} from "./agents/routes";
+import {membershipRoute} from "./access/routes";
+import {externalRoute} from "./byodb/routes";
+import type {ExternalServices} from "./byodb/service";
 import { aiRoute, type AIServices } from "./ai/routes";
 import { verifySession, type SessionIdentity } from "./auth";
 import { ApiError, badRequest, json, notFound, unavailable } from "./errors";
@@ -21,7 +25,7 @@ function cors(request: Request, env: Env, response: Response): Response {
   return response;
 }
 
-async function route(request: Request, env: Env, requestId: string, authenticate: Authenticator, databases?: DatabaseServices, ai?: AIServices, context?: ExecutionContext): Promise<Response> {
+async function route(request: Request, env: Env, requestId: string, authenticate: Authenticator, databases?: DatabaseServices, ai?: AIServices, context?: ExecutionContext,platform?:{external?:ExternalServices}): Promise<Response> {
   const url = new URL(request.url);
   const path = url.pathname;
   const method = request.method;
@@ -31,8 +35,13 @@ async function route(request: Request, env: Env, requestId: string, authenticate
   if (!path.startsWith("/api/v1/")) throw notFound();
   if (!env.METADATA) throw unavailable();
   const identity = await authenticate(request, env);
+  if(env.WORKSPACE_MEMBERSHIP_MODE!==undefined&&env.WORKSPACE_MEMBERSHIP_MODE!=="d1")throw unavailable();
   const user = await resolveUser(env.METADATA, identity.clerkUserId);
   const db = env.METADATA;
+  if(/^\/api\/v1\/workspaces\/[^/]+\/(agents|agent-runs)(?:\/|$)/.test(path)){const response=await agentRoute(request,env,user.id,requestId,databases,ai,context);if(response)return response;}
+  if(/^\/api\/v1\/workspaces\/[^/]+\/external-connections(?:\/|$)/.test(path)){const response=await externalRoute(request,env,user.id,requestId,platform?.external);if(response)return response;}
+  if(/^\/api\/v1\/workspaces\/[^/]+\/members(?:\/|$)/.test(path)){const response=await membershipRoute(request,env,user.id,requestId);if(response)return response;}
+
   if (path.startsWith("/api/v1/ai/") || /^\/api\/v1\/workspaces\/[^/]+\/ai\//.test(path)) {
     const response=await aiRoute(request,env,user.id,requestId,databases,ai,context);
     if(response)return response;
@@ -90,7 +99,7 @@ async function route(request: Request, env: Env, requestId: string, authenticate
   throw notFound();
 }
 
-export function createHandler(authenticate: Authenticator = verifySession, databases?: DatabaseServices, ai?: AIServices) {
+export function createHandler(authenticate: Authenticator = verifySession, databases?: DatabaseServices, ai?: AIServices,platform?:{external?:ExternalServices}) {
   return async (request: Request, env: Env, context?: ExecutionContext): Promise<Response> => {
     const requestId = crypto.randomUUID();
     if (request.method === "OPTIONS") {
@@ -101,7 +110,7 @@ export function createHandler(authenticate: Authenticator = verifySession, datab
       return cors(request, env, new Response(null, { status: 204, headers: { "X-Request-Id": requestId } }));
     }
     try {
-      return cors(request, env, await route(request, env, requestId, authenticate, databases, ai, context));
+      return cors(request, env, await route(request, env, requestId, authenticate, databases, ai, context,platform));
     } catch (error) {
       if (error instanceof ApiError) {
         return cors(request, env, json({ error: { code: error.code, message: error.publicMessage, requestId } }, error.status, requestId));

@@ -69,7 +69,7 @@ beforeAll(async () => {
     r2 = await runtime.getR2Bucket("KEYS");
     bucket = { get: async (key) => { const o = await r2.get(key); return o ? { size: o.size, etag: o.etag, json: () => o.json() } : null; }, put: (key, value, options) => r2.put(key, value, options) };
     env = { METADATA: db };
-    for (const file of ["0001_metadata.sql", "0002_neon_poc.sql", "0003_ai_workspace.sql"]) {
+    for (const file of ["0001_metadata.sql", "0002_neon_poc.sql", "0003_ai_workspace.sql", "0004_external_databases.sql", "0005_agent_workflows.sql"]) {
         const sql = readFileSync(new URL(`../migrations/${file}`, import.meta.url), "utf8");
         await db.batch(sql.split(";").map(s => s.trim()).filter(Boolean).map(s => db.prepare(s)));
     }

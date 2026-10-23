@@ -1,3 +1,5 @@
+import {dataSource,dataSources} from "./sources";
+import {externalTransport} from "../byodb/service";
 import { ApiError, badRequest, json, notFound, unavailable } from "../errors";
 import { requireRole, workspaceAccess } from "../metadata";
 import { ProvisioningError } from "../neon/contracts";
@@ -13,13 +15,14 @@ export interface DatabaseServices {
   provisioning?: { durableSecrets: true; service: TenantProvisioner };
 }
 export function defaultDatabaseServices(env: Env, request: Request): DatabaseServices {
-  if (env.NEON_DEVELOPMENT_CONFIG !== undefined) return developmentServices(env);
-  return { transport: new PgReadTransport(new LocalRuntimeCredentials(env, request)) };
+  const managed = env.NEON_DEVELOPMENT_CONFIG !== undefined ? developmentServices(env) : {transport:new PgReadTransport(new LocalRuntimeCredentials(env,request))};
+  const external=externalTransport(env);
+  return {...managed,transport:{read:(tenant,sql,parameters,limit)=>tenant.kind==='external'?external.read(tenant,sql,parameters,limit):managed.transport.read(tenant,sql,parameters,limit)}};
 }
 function publicTenant(row: TenantMetadata) {
-  return { id: row.id, workspaceId: row.workspace_id, name: row.database_name, state: row.state,
-    retryAvailable: row.state === "failed" && !row.claim_id && row.last_error !== "QUARANTINE_REQUIRED",
-    error: row.state === "failed" ? "Provisioning requires attention. Retry when configuration is available." : null };
+  return { id: row.id, workspaceId: row.workspace_id, name: row.display_name??row.database_name, state: row.state, kind:row.kind??"managed",schema:row.schema_name??"tenant_data",
+    retryAvailable: row.kind!=="external" && row.state === "failed" && !row.claim_id && row.last_error !== "QUARANTINE_REQUIRED",
+    error: row.state === "failed" ? row.kind==="external"?"External connection unavailable. Review connection health in Databases.":"Provisioning requires attention. Retry when configuration is available." : null };
 }
 async function queryBody(request: Request): Promise<{ sql?: unknown; parameters?: unknown }> {
   if (request.headers.get("Content-Type")?.split(";")[0].trim() !== "application/json") throw badRequest("JSON body required.");
@@ -75,20 +78,19 @@ export async function databaseRoute(request: Request, env: Env, userId: string, 
   };
   if (!match[2]) {
     if (request.method === "GET") {
-      const rows = await env.METADATA.prepare("SELECT * FROM managed_tenant_databases WHERE workspace_id = ? AND organization_id = ?").bind(workspaceId, access.workspace.organization_id).all<TenantMetadata>();
-      return json({ data: rows.results.map(publicTenant), capabilities, requestId }, 200, requestId);
+      const rows = await dataSources(env.METADATA,workspaceId,access.workspace.organization_id);
+      return json({ data: rows.map(publicTenant), capabilities, requestId }, 200, requestId);
     }
     if (request.method !== "POST") throw notFound();
     requireRole(access.role, ["owner", "admin"]);
     return provision("provision");
   }
   if (!/^[a-f0-9]{32}$/.test(match[2])) throw badRequest("Invalid database ID.");
-  const tenant = await env.METADATA.prepare("SELECT * FROM managed_tenant_databases WHERE id = ? AND workspace_id = ? AND organization_id = ?")
-    .bind(match[2], workspaceId, access.workspace.organization_id).first<TenantMetadata>();
-  if (!tenant) throw notFound();
+  const tenant=await dataSource(env.METADATA,match[2],workspaceId,access.workspace.organization_id);
   const action = match[3];
   if (!action && request.method === "GET") return json({ data: publicTenant(tenant), capabilities, requestId }, 200, requestId);
   if (action === "retry" && request.method === "POST") {
+    if(tenant.kind==="external")throw new ApiError(409,"EXTERNAL_CONNECTION","Manage external credentials in Databases.");
     requireRole(access.role, ["owner", "admin"]);
     if (tenant.state !== "failed" || tenant.claim_id || tenant.last_error === "QUARANTINE_REQUIRED") throw new ApiError(409, "NOT_RETRYABLE", "Database provisioning cannot be retried now.");
     return provision("retry");
@@ -107,10 +109,10 @@ export async function databaseRoute(request: Request, env: Env, userId: string, 
       return result;
     };
     let data: unknown;
-    const schema = url.searchParams.get("schema") ?? "tenant_data";
+    const schema = url.searchParams.get("schema") ?? tenant.schema_name ?? "tenant_data";
     const table = url.searchParams.get("table") ?? "";
-    if (schema !== "tenant_data") throw badRequest("Schema is not available.");
-    if (action === "schemas") data = (await inspect("SELECT nspname AS name FROM pg_namespace WHERE nspname = 'tenant_data' AND has_schema_privilege(current_user, oid, 'USAGE')")).rows;
+    if (schema !== (tenant.schema_name??"tenant_data")) throw badRequest("Schema is not available.");
+    if (action === "schemas") data = (await inspect("SELECT nspname AS name FROM pg_namespace WHERE nspname = $1 AND has_schema_privilege(current_user, oid, 'USAGE')",[schema])).rows;
     else if (action === "tables") data = (await inspect("SELECT c.relname AS name, CASE c.relkind WHEN 'v' THEN 'view' WHEN 'm' THEN 'materialized view' ELSE 'table' END AS kind FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace WHERE n.nspname=$1 AND c.relkind IN ('r','p','v','m') AND has_table_privilege(current_user,c.oid,'SELECT') ORDER BY c.relname", [schema])).rows;
     else if (action === "relation" || action === "rows") {
       quoteIdentifier(table);
@@ -130,7 +132,7 @@ export async function databaseRoute(request: Request, env: Env, userId: string, 
       }
     } else {
       const body = await queryBody(request);
-      const query = approvedSelect(body.sql, body.parameters);
+      const query = approvedSelect(body.sql, body.parameters,schema);
       data = await run(query.sql, query.parameters);
     }
     if (new TextEncoder().encode(JSON.stringify({ data, requestId })).byteLength > 65536) {

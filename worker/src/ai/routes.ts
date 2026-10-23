@@ -1,3 +1,4 @@
+import {dataSource} from "../database/sources";
 import { ModelRegistry } from "./registry";
 import { ApiError, badRequest, json, notFound, unavailable } from "../errors";
 import { workspaceAccess } from "../metadata";
@@ -12,7 +13,7 @@ export interface AIServices {
     provider: AIProvider;
     credentials: (env: Env) => UserCredentialStore;
 }
-const defaults: AIServices = { provider: new OpenRouterProvider(), credentials: aiKeyStore };
+export const defaultAIServices: AIServices = { provider: new OpenRouterProvider(), credentials: aiKeyStore };
 interface CredentialRow {
     credential_reference: string;
     status: string;
@@ -57,7 +58,7 @@ function only(value: Record<string, unknown>, keys: string[]) {
     if (Object.keys(value).some(key => !keys.includes(key)))
         throw badRequest("Unexpected request field.");
 }
-export async function aiRoute(request: Request, env: Env, userId: string, requestId: string, databases?: DatabaseServices, services: AIServices = defaults, context?: ExecutionContext): Promise<Response | null> {
+export async function aiRoute(request: Request, env: Env, userId: string, requestId: string, databases?: DatabaseServices, services: AIServices = defaultAIServices, context?: ExecutionContext): Promise<Response | null> {
     const url = new URL(request.url), path = url.pathname, method = request.method;
     const credential = () => env.METADATA.prepare("SELECT credential_reference,status,default_model FROM ai_provider_credentials WHERE user_id=? AND provider='openrouter'").bind(userId).first<CredentialRow>();
     const runtimeKey = async () => {
@@ -122,7 +123,7 @@ export async function aiRoute(request: Request, env: Env, userId: string, reques
     const workspace = uuid(match[1]);
     const access = await workspaceAccess(env.METADATA, workspace, userId);
     if (match[2] === "activity" && method === "GET") {
-        const result = await env.METADATA.prepare("SELECT id,action,resource_type,resource_id,outcome,created_at FROM audit_events WHERE organization_id=? AND actor_user_id=? AND ((resource_type='workspace' AND resource_id=?) OR (resource_type='database' AND resource_id IN (SELECT id FROM managed_tenant_databases WHERE workspace_id=?))) ORDER BY created_at DESC,id LIMIT 20").bind(access.workspace.organization_id, userId, workspace, workspace).all();
+        const result = await env.METADATA.prepare("SELECT id,action,resource_type,resource_id,outcome,created_at FROM audit_events WHERE organization_id=? AND actor_user_id=? AND ((resource_type='workspace' AND resource_id=?) OR (resource_type='database' AND resource_id IN (SELECT id FROM managed_tenant_databases WHERE workspace_id=? UNION SELECT id FROM external_databases WHERE workspace_id=?))) ORDER BY created_at DESC,id LIMIT 20").bind(access.workspace.organization_id, userId, workspace, workspace,workspace).all();
         return json({ data: result.results, requestId }, 200, requestId);
     }
     if (!match[3]) {
@@ -143,14 +144,15 @@ export async function aiRoute(request: Request, env: Env, userId: string, reques
         const database = value.databaseId ?? null;
         if (database !== null && (typeof database !== "string" || !/^[a-f0-9]{32}$/.test(database)))
             throw badRequest("Invalid database ID.");
-        if (database && !await env.METADATA.prepare("SELECT id FROM managed_tenant_databases WHERE id=? AND workspace_id=? AND state='active'").bind(database, workspace).first())
-            throw notFound();
+        const selected=database?await dataSource(env.METADATA,database as string,workspace,access.workspace.organization_id):null;
+        if(selected&&selected.state!=='active')throw badRequest("Select an active database.");
         if (value.allowRows !== undefined && typeof value.allowRows !== "boolean")
             throw badRequest("Invalid row-context permission.");
         const title = typeof value.title === "string" ? value.title.slice(0, 100) : "New conversation", id = crypto.randomUUID();
         if (title.includes(key))
             throw badRequest("Do not include credentials in a conversation title.");
-        await env.METADATA.prepare("INSERT INTO ai_conversations(id,workspace_id,user_id,database_id,title,model,allow_rows) VALUES (?,?,?,?,?,?,?)").bind(id, workspace, userId, database, title, model, value.allowRows === true ? 1 : 0).run();
+        if(selected?.kind==='external')await env.METADATA.prepare("INSERT INTO ai_conversations(id,workspace_id,user_id,external_database_id,title,model,allow_rows) VALUES (?,?,?,?,?,?,?)").bind(id,workspace,userId,database,title,model,value.allowRows===true?1:0).run();
+        else await env.METADATA.prepare("INSERT INTO ai_conversations(id,workspace_id,user_id,database_id,title,model,allow_rows) VALUES (?,?,?,?,?,?,?)").bind(id, workspace, userId, database, title, model, value.allowRows === true ? 1 : 0).run();
         return json({ data: publicConversation(await conversationAccess(env.METADATA, workspace, userId, id)), requestId }, 201, requestId);
     }
     const row = await conversationAccess(env.METADATA, workspace, userId, uuid(match[3]));

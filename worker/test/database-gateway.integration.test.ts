@@ -1,5 +1,8 @@
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { Client } from "pg";
+import {ExternalResolver,externalSource,type ExternalRow} from "../src/byodb/service";
+import {ExternalCredentialStore} from "../src/byodb/credentials";
+import {destinationDigest} from "../src/byodb/policy";
 import { randomBytes, randomUUID } from "node:crypto";
 import { spawnSync } from "node:child_process";
 import { readFileSync, mkdtempSync, mkdirSync, rmSync } from "node:fs";
@@ -82,7 +85,7 @@ beforeAll(async () => {
       await client.query("CREATE TABLE tenant_data.departments (id int PRIMARY KEY); INSERT INTO tenant_data.departments VALUES (1); CREATE TABLE tenant_data.items (id int PRIMARY KEY, department_id int REFERENCES tenant_data.departments(id), name text NOT NULL, precise bigint); CREATE INDEX items_name_idx ON tenant_data.items(name); INSERT INTO tenant_data.items SELECT n, 1, 'item-' || n, 9007199254740993 FROM generate_series(1,250) n; CREATE VIEW tenant_data.items_view AS SELECT id,name FROM tenant_data.items; CREATE VIEW tenant_data.slow AS SELECT id, pg_sleep(0.02)::text AS waited FROM tenant_data.items; CREATE TABLE tenant_data.large (value text); INSERT INTO tenant_data.large VALUES (repeat('x',10000));");
     });
   }
-  for (const file of ["0001_metadata.sql", "0002_neon_poc.sql"]) {
+  for (const file of ["0001_metadata.sql", "0002_neon_poc.sql", "0004_external_databases.sql"]) {
     const sql = readFileSync(new URL(`../migrations/${file}`, import.meta.url), "utf8");
     await db.batch(sql.split(";").map(part => part.trim()).filter(Boolean).map(part => db.prepare(part)));
   }
@@ -118,6 +121,33 @@ afterAll(async () => {
 });
 
 describe.runIf(enabled)("gateway with real TLS PostgreSQL + D1 (mocked Clerk identity, no Neon)", () => {
+  it("reads an external schema over real TLS with a pinned-IP config, encrypted password and no writable role", async () => {
+    const externalId='e'.repeat(32), ref='byodb-postgresql/'+randomUUID();
+    const approved={id:'local-fixture',hostname:'db.example.com',address:'8.8.8.8',port:5432,databases:[target(ta).database],roles:[target(ta).runtimeRole],schemas:['app']};
+    await withClient(target(ta).database,'postgres',password,async client=>{await client.query(`CREATE SCHEMA app; CREATE TABLE app.customers(id int PRIMARY KEY,name text); INSERT INTO app.customers VALUES (1,'local row'); GRANT USAGE ON SCHEMA app TO "${target(ta).runtimeRole}"; GRANT SELECT ON app.customers TO "${target(ta).runtimeRole}";`);});
+    const r2=await runtime.getR2Bucket('VAULT');
+    const bucket={get:async(key:string)=>{const o=await r2.get(key);return o?{size:o.size,etag:o.etag,json:()=>o.json()}:null;},put:(key:string,value:string,options:any)=>r2.put(key,value,options)};
+    const store=new ExternalCredentialStore(bucket,JSON.stringify({test:randomBytes(32).toString('hex')}),'test');
+    await store.put({organizationId:'o-a',workspaceId:wa,connectionId:externalId},ref,passwords.get(target(ta).credentialReference)!);
+    await db.prepare("INSERT INTO external_databases(id,workspace_id,organization_id,name,destination_id,destination_digest,database_name,runtime_role,schema_name,credential_reference,state) VALUES (?,?,'o-a','External','local-fixture',?,?,?,'app',?,'active')").bind(externalId,wa,destinationDigest(approved),target(ta).database,target(ta).runtimeRole,ref).run();
+    const configuration={...env,BYODB_ALLOWED_DESTINATIONS:JSON.stringify([approved])};
+    const external=new PgReadTransport(new ExternalResolver(configuration,()=>store),3000,{external:true,clientFactory:config=>{
+      expect(config.host).toBe(approved.address);expect(config.port).toBe(5432);expect(config.ssl).toMatchObject({rejectUnauthorized:true,servername:approved.hostname});
+      // Disposable TLS fixture only: production config remains pinned above.
+      return new Client({...config,host:'127.0.0.1',port,ssl:{rejectUnauthorized:true,servername:'localhost',ca}});
+    }});
+    const externalHandler=createHandler(async()=>({clerkUserId:'owner',sessionId:'mocked'}),{transport:external});
+    const request=async(action:string,sql?:string)=>externalHandler(new Request(`https://local.test/api/v1/workspaces/${wa}/databases/${externalId}/${action}`,{...(sql?{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({sql})}:{})}),configuration);
+    for(const action of ['schemas','tables','relation?table=customers','rows?table=customers'])expect((await request(action)).status).toBe(200);
+    expect(await (await request('query','SELECT name FROM app.customers')).json()).toMatchObject({data:{rows:[{name:'local row'}]}});
+    for(const sql of ['DELETE FROM app.customers','DROP TABLE app.customers','SELECT * FROM app.customers; SELECT * FROM pg_roles','SELECT * FROM tenant_data.items'])expect((await request('query',sql)).status).toBe(400);
+    const row=(await db.prepare('SELECT * FROM external_databases WHERE id=?').bind(externalId).first<ExternalRow>())!;
+    await expect(external.read(externalSource(row),'DELETE FROM app.customers RETURNING id')).rejects.toThrow();
+    await withClient(target(ta).database,'postgres',password,async client=>{await client.query(`GRANT INSERT ON app.customers TO "${target(ta).runtimeRole}"`);});
+    expect((await request('schemas')).status).toBe(503);
+    await withClient(target(ta).database,'postgres',password,async client=>{await client.query(`REVOKE INSERT ON app.customers FROM "${target(ta).runtimeRole}"`);});
+    expect((await request('schemas')).status).toBe(200);
+  });
   it("serves schemas, tables/views, columns, keys, indexes and stable bounded previews", async () => {
     for (const action of ["schemas","tables","relation?table=items","rows?table=items&limit=20&offset=20"]) {
       const response = await call(`${wa}/databases/${ta}/${action}`);
