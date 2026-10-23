@@ -1,3 +1,4 @@
+import { aiRoute, type AIServices } from "./ai/routes";
 import { verifySession, type SessionIdentity } from "./auth";
 import { ApiError, badRequest, json, notFound, unavailable } from "./errors";
 import {
@@ -20,7 +21,7 @@ function cors(request: Request, env: Env, response: Response): Response {
   return response;
 }
 
-async function route(request: Request, env: Env, requestId: string, authenticate: Authenticator, databases?: DatabaseServices): Promise<Response> {
+async function route(request: Request, env: Env, requestId: string, authenticate: Authenticator, databases?: DatabaseServices, ai?: AIServices, context?: ExecutionContext): Promise<Response> {
   const url = new URL(request.url);
   const path = url.pathname;
   const method = request.method;
@@ -32,6 +33,10 @@ async function route(request: Request, env: Env, requestId: string, authenticate
   const identity = await authenticate(request, env);
   const user = await resolveUser(env.METADATA, identity.clerkUserId);
   const db = env.METADATA;
+  if (path.startsWith("/api/v1/ai/") || /^\/api\/v1\/workspaces\/[^/]+\/ai\//.test(path)) {
+    const response=await aiRoute(request,env,user.id,requestId,databases,ai,context);
+    if(response)return response;
+  }
   if (path.match(/^\/api\/v1\/workspaces\/[^/]+\/databases(?:\/|$)/)) {
     const response = await databaseRoute(request, env, user.id, requestId, databases ?? defaultDatabaseServices(env, request));
     if (response) return response;
@@ -69,7 +74,7 @@ async function route(request: Request, env: Env, requestId: string, authenticate
   const workspace = path.match(/^\/api\/v1\/workspaces\/([^/]+)$/);
   if (workspace && method === "GET") {
     const result = await workspaceAccess(db, uuid(workspace[1]), user.id);
-    return json({ data: result.workspace, requestId }, 200, requestId);
+    return json({ data: result.workspace, role: result.role, requestId }, 200, requestId);
   }
   const connections = path.match(/^\/api\/v1\/workspaces\/([^/]+)\/connections$/);
   if (connections && method === "GET") {
@@ -85,8 +90,8 @@ async function route(request: Request, env: Env, requestId: string, authenticate
   throw notFound();
 }
 
-export function createHandler(authenticate: Authenticator = verifySession, databases?: DatabaseServices) {
-  return async (request: Request, env: Env): Promise<Response> => {
+export function createHandler(authenticate: Authenticator = verifySession, databases?: DatabaseServices, ai?: AIServices) {
+  return async (request: Request, env: Env, context?: ExecutionContext): Promise<Response> => {
     const requestId = crypto.randomUUID();
     if (request.method === "OPTIONS") {
       const origin = request.headers.get("Origin");
@@ -96,7 +101,7 @@ export function createHandler(authenticate: Authenticator = verifySession, datab
       return cors(request, env, new Response(null, { status: 204, headers: { "X-Request-Id": requestId } }));
     }
     try {
-      return cors(request, env, await route(request, env, requestId, authenticate, databases));
+      return cors(request, env, await route(request, env, requestId, authenticate, databases, ai, context));
     } catch (error) {
       if (error instanceof ApiError) {
         return cors(request, env, json({ error: { code: error.code, message: error.publicMessage, requestId } }, error.status, requestId));

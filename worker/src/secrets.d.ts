@@ -2,6 +2,8 @@
 // Bindings are generated from wrangler.jsonc. Keep the vault optional at the
 // application boundary so absent/misconfigured bindings are checked at runtime.
 interface Env extends Omit<WorkerBindings, "TENANT_CREDENTIALS"> {
+  AI_VAULT_KEYS?: string;
+  AI_VAULT_KEY_ID?: string;
   CLERK_SECRET_KEY?: string;
   CLERK_ISSUER?: string;
   CLERK_AUDIENCE?: string;
