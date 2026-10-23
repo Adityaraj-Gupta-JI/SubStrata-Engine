@@ -12,7 +12,7 @@ export async function externalRoute(request: Request, env: Env, user: string, re
     const audit = async (action: string, outcome: string) => env.METADATA.prepare("INSERT INTO audit_events(id,organization_id,actor_user_id,action,resource_type,resource_id,outcome,request_id) VALUES (?,?,?,?,'workspace',?,?,?)").bind(crypto.randomUUID(), organization, user, `external.${action}`, workspace, outcome, requestId).run();
     if (request.method === 'GET' && !match[2]) {
         const rows = await env.METADATA.prepare('SELECT * FROM external_databases WHERE workspace_id=? AND organization_id=? ORDER BY created_at DESC').bind(workspace, organization).all<ExternalRow>();
-        return json({ data: rows.results.map(metadata), canManage: ['owner', 'admin'].includes(access.role), mysql: { available: false, reason: 'MySQL transport, TLS pinning and authorization are not validated.' }, requestId }, 200, requestId);
+        return json({ data: rows.results.map(metadata), canManage: ['owner', 'admin'].includes(access.role), mysql: { available: !!env.MYSQL_ALLOWED_DESTINATIONS&&!!env.MYSQL_VAULT_KEYS&&!!env.MYSQL_VAULT_KEY_ID, reason: 'MySQL uses the separate mysql-connections API with its own approved policy and encrypted credentials.' }, requestId }, 200, requestId);
     }
     requireRole(access.role, ['owner', 'admin']);
     if (request.method === 'GET' && match[2] === 'destinations')
@@ -22,7 +22,7 @@ export async function externalRoute(request: Request, env: Env, user: string, re
     const value = await jsonBody(request);
     fields(value, ['action', 'name', 'destinationId', 'database', 'username', 'schema', 'password', 'revision', 'engine']);
     if (value.engine !== undefined && value.engine !== 'postgresql')
-        throw new ApiError(501, 'MYSQL_UNAVAILABLE', 'MySQL transport is not available. PostgreSQL is supported through approved destinations.');
+        throw new ApiError(501, 'MYSQL_SEPARATE_ENDPOINT', 'Use mysql-connections for MySQL. This endpoint accepts PostgreSQL only.');
     const old = match[2] ? await env.METADATA.prepare('SELECT * FROM external_databases WHERE id=? AND workspace_id=? AND organization_id=?').bind(match[2], workspace, organization).first<ExternalRow>() : null;
     if (match[2] && !old)
         throw notFound();

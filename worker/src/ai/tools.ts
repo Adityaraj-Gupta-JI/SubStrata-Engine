@@ -1,10 +1,11 @@
+import {sqlProposal} from "./proposals";
 import {dataSource} from "../database/sources";
 import {workspaceAccess} from "../metadata";
 import { ApiError, badRequest, unavailable } from "../errors";
 import { databaseRoute, type DatabaseServices } from "../database/gateway";
 import { approvedSelect } from "../database/sql-policy";
 import type { ToolDefinition, Trace } from "./contracts";
-const descriptions: Record<string, string> = { list_databases: "List databases in the current authorized workspace.", list_schemas: "List schemas in the selected database.", list_tables: "List tables in the selected schema.", describe_table: "Read column, key and index metadata.", preview_table: "Preview at most five rows, only with explicit row-context permission.", propose_sql: "Propose one read-only SELECT for manual review. Does not execute SQL." };
+const descriptions: Record<string, string> = { list_databases: "List databases in the current authorized workspace.", list_schemas: "List schemas in the selected database.", list_tables: "List tables in the selected schema.", describe_table: "Read column, key and index metadata.", preview_table: "Preview at most five rows, only with explicit row-context permission.", propose_sql: "Propose supported dialect-specific SQL or a schema change for human review. Changes require a separate approval token; this tool never executes SQL." };
 export const toolDefinitions: ToolDefinition[] = Object.entries(descriptions).map(([name, description]) => ({ type: "function", function: { name, description, parameters: { type: "object", properties: name === "propose_sql" ? { sql: { type: "string" } } : ["describe_table", "preview_table"].includes(name) ? { table: { type: "string" } } : {}, required: name === "propose_sql" ? ["sql"] : ["describe_table", "preview_table"].includes(name) ? ["table"] : [], additionalProperties: false } } }));
 export interface ToolScope {
     workspaceId: string;
@@ -61,8 +62,7 @@ export class AuthorizedAITools {
                     throw badRequest("SQL proposal is too large.");
                 const access=await workspaceAccess(this.env.METADATA,this.scope.workspaceId,this.scope.userId);
                 const source=await dataSource(this.env.METADATA,this.scope.databaseId,this.scope.workspaceId,access.workspace.organization_id);
-                this.proposal = approvedSelect(sql, [],source.schema_name??"tenant_data").sql;
-                return { sql: this.proposal, executed: false, requiresManualExecution: true };
+                const proposal=sqlProposal(source,sql);this.proposal=proposal.sql;return proposal;
             }
             if (name === "preview_table" && !this.scope.allowRows)
                 throw new ApiError(403, "AI_ROWS_NOT_ALLOWED", "Row context was not approved for this conversation.");
@@ -90,7 +90,7 @@ export class AuthorizedAITools {
             const metadata = [];
             for (const table of tables.slice(0, 3))
                 metadata.push({ table: table.name, description: await this.execute("describe_table", JSON.stringify({ table: table.name })) });
-            return JSON.stringify({ schemas, tables, metadata }).slice(0, 14000);
+            return JSON.stringify({ dialect:(await dataSource(this.env.METADATA,this.scope.databaseId,this.scope.workspaceId,(await workspaceAccess(this.env.METADATA,this.scope.workspaceId,this.scope.userId)).workspace.organization_id)).dialect??"postgresql", schemas, tables, metadata }).slice(0, 14000);
         }
         catch(error) {
             if(error instanceof ApiError&&["AI_CANCELLED","AGENT_DEADLINE","AI_TRACE_UNAVAILABLE"].includes(error.code))throw error;

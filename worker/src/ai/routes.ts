@@ -123,7 +123,7 @@ export async function aiRoute(request: Request, env: Env, userId: string, reques
     const workspace = uuid(match[1]);
     const access = await workspaceAccess(env.METADATA, workspace, userId);
     if (match[2] === "activity" && method === "GET") {
-        const result = await env.METADATA.prepare("SELECT id,action,resource_type,resource_id,outcome,created_at FROM audit_events WHERE organization_id=? AND actor_user_id=? AND ((resource_type='workspace' AND resource_id=?) OR (resource_type='database' AND resource_id IN (SELECT id FROM managed_tenant_databases WHERE workspace_id=? UNION SELECT id FROM external_databases WHERE workspace_id=?))) ORDER BY created_at DESC,id LIMIT 20").bind(access.workspace.organization_id, userId, workspace, workspace,workspace).all();
+        const result = await env.METADATA.prepare("SELECT id,action,resource_type,resource_id,outcome,created_at FROM audit_events WHERE organization_id=? AND actor_user_id=? AND ((resource_type='workspace' AND resource_id=?) OR (resource_type='database' AND resource_id IN (SELECT id FROM managed_tenant_databases WHERE workspace_id=? UNION SELECT id FROM external_databases WHERE workspace_id=? UNION SELECT id FROM mysql_databases WHERE workspace_id=?))) ORDER BY created_at DESC,id LIMIT 20").bind(access.workspace.organization_id, userId, workspace, workspace,workspace,workspace).all();
         return json({ data: result.results, requestId }, 200, requestId);
     }
     if (!match[3]) {
@@ -151,7 +151,8 @@ export async function aiRoute(request: Request, env: Env, userId: string, reques
         const title = typeof value.title === "string" ? value.title.slice(0, 100) : "New conversation", id = crypto.randomUUID();
         if (title.includes(key))
             throw badRequest("Do not include credentials in a conversation title.");
-        if(selected?.kind==='external')await env.METADATA.prepare("INSERT INTO ai_conversations(id,workspace_id,user_id,external_database_id,title,model,allow_rows) VALUES (?,?,?,?,?,?,?)").bind(id,workspace,userId,database,title,model,value.allowRows===true?1:0).run();
+        if(selected?.dialect==='mysql')await env.METADATA.prepare("INSERT INTO ai_conversations(id,workspace_id,user_id,mysql_database_id,title,model,allow_rows) VALUES (?,?,?,?,?,?,?)").bind(id,workspace,userId,database,title,model,value.allowRows===true?1:0).run();
+        else if(selected?.kind==='external')await env.METADATA.prepare("INSERT INTO ai_conversations(id,workspace_id,user_id,external_database_id,title,model,allow_rows) VALUES (?,?,?,?,?,?,?)").bind(id,workspace,userId,database,title,model,value.allowRows===true?1:0).run();
         else await env.METADATA.prepare("INSERT INTO ai_conversations(id,workspace_id,user_id,database_id,title,model,allow_rows) VALUES (?,?,?,?,?,?,?)").bind(id, workspace, userId, database, title, model, value.allowRows === true ? 1 : 0).run();
         return json({ data: publicConversation(await conversationAccess(env.METADATA, workspace, userId, id)), requestId }, 201, requestId);
     }

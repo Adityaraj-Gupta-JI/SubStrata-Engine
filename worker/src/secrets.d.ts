@@ -2,6 +2,12 @@
 // Bindings are generated from wrangler.jsonc. Keep the vault optional at the
 // application boundary so absent/misconfigured bindings are checked at runtime.
 interface Env extends Omit<WorkerBindings, "TENANT_CREDENTIALS"> {
+  DATABASE_EXECUTION_TARGETS?: string;
+  MYSQL_ALLOWED_DESTINATIONS?: string;
+  MYSQL_VAULT_KEYS?: string;
+  MYSQL_VAULT_KEY_ID?: string;
+  SQL_VAULT_KEYS?: string;
+  SQL_VAULT_KEY_ID?: string;
   BYODB_ALLOWED_DESTINATIONS?: string;
   BYODB_VAULT_KEYS?: string;
   BYODB_VAULT_KEY_ID?: string;

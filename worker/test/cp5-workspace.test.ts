@@ -34,7 +34,7 @@ beforeAll(async () => {
     const r2 = await runtime.getR2Bucket('VAULT');
     bucket = { get: async (key) => { const o = await r2.get(key); return o ? { size: o.size, etag: o.etag, json: () => o.json() } : null; }, put: (key, value, options) => r2.put(key, value, options) };
     env = { METADATA: db, BYODB_ALLOWED_DESTINATIONS: JSON.stringify([destination]), BYODB_VAULT_KEYS: ring, BYODB_VAULT_KEY_ID: 'test', TENANT_CREDENTIALS: bucket as R2Bucket };
-    for (const name of ['0001_metadata.sql', '0002_neon_poc.sql', '0003_ai_workspace.sql', '0004_external_databases.sql', '0005_agent_workflows.sql'])
+    for (const name of ['0001_metadata.sql', '0002_neon_poc.sql', '0003_ai_workspace.sql', '0004_external_databases.sql', '0005_agent_workflows.sql','0007_mysql_databases.sql','0008_mysql_ai_context.sql'])
         await db.batch(readFileSync(new URL('../migrations/' + name, import.meta.url), 'utf8').split(';').map(s => s.trim()).filter(Boolean).map(s => db.prepare(s)));
     for (let i = 0; i < users.length; i++)
         await db.prepare('INSERT INTO users(id,clerk_user_id) VALUES (?,?)').bind(users[i], 'clerk-' + i).run();

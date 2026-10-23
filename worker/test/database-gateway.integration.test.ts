@@ -1,3 +1,4 @@
+import {PgExecutionService,ExecutionCredentials} from "../src/execution/service";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { Client } from "pg";
 import {ExternalResolver,externalSource,type ExternalRow} from "../src/byodb/service";
@@ -85,7 +86,7 @@ beforeAll(async () => {
       await client.query("CREATE TABLE tenant_data.departments (id int PRIMARY KEY); INSERT INTO tenant_data.departments VALUES (1); CREATE TABLE tenant_data.items (id int PRIMARY KEY, department_id int REFERENCES tenant_data.departments(id), name text NOT NULL, precise bigint); CREATE INDEX items_name_idx ON tenant_data.items(name); INSERT INTO tenant_data.items SELECT n, 1, 'item-' || n, 9007199254740993 FROM generate_series(1,250) n; CREATE VIEW tenant_data.items_view AS SELECT id,name FROM tenant_data.items; CREATE VIEW tenant_data.slow AS SELECT id, pg_sleep(0.02)::text AS waited FROM tenant_data.items; CREATE TABLE tenant_data.large (value text); INSERT INTO tenant_data.large VALUES (repeat('x',10000));");
     });
   }
-  for (const file of ["0001_metadata.sql", "0002_neon_poc.sql", "0004_external_databases.sql"]) {
+  for (const file of ["0001_metadata.sql", "0002_neon_poc.sql", "0004_external_databases.sql", "0007_mysql_databases.sql"]) {
     const sql = readFileSync(new URL(`../migrations/${file}`, import.meta.url), "utf8");
     await db.batch(sql.split(";").map(part => part.trim()).filter(Boolean).map(part => db.prepare(part)));
   }
@@ -254,6 +255,42 @@ describe.runIf(enabled)("gateway with real TLS PostgreSQL + D1 (mocked Clerk ide
     expect(rows.results.some(row=>row.outcome==="denied")).toBe(true);
     expect(JSON.stringify(rows.results)).not.toMatch(/PRIVATE_SENTINEL|SELECT |password/);
   });
+  it("executes approved changes using separate real TLS roles and rolls back failing PostgreSQL transactions",async()=>{
+    await db.batch(readFileSync(new URL('../migrations/0006_sql_approvals.sql',import.meta.url),'utf8').split('\n').map(s=>s.trim()).filter(Boolean).map(s=>db.prepare(s)));
+    const writer='writer_cp6',admin='schema_admin_cp6',writerSecret=randomBytes(32).toString('hex'),adminSecret=randomBytes(32).toString('hex');
+    await withClient(target(ta).database,'postgres',password,async c=>{await c.query(`CREATE ROLE ${writer} LOGIN PASSWORD '${writerSecret}' NOSUPERUSER NOCREATEDB NOCREATEROLE NOINHERIT NOREPLICATION NOBYPASSRLS; CREATE ROLE ${admin} LOGIN PASSWORD '${adminSecret}' NOSUPERUSER NOCREATEDB NOCREATEROLE NOINHERIT NOREPLICATION NOBYPASSRLS; GRANT CONNECT ON DATABASE "${target(ta).database}" TO ${writer},${admin}; GRANT USAGE ON SCHEMA tenant_data TO ${writer}; ALTER SCHEMA tenant_data OWNER TO ${admin};`);});
+    const r2=await runtime.getR2Bucket('VAULT'),bucket={get:async(key:string)=>{const o=await r2.get(key);return o?{size:o.size,etag:o.etag,json:()=>o.json()}:null;},put:(key:string,value:string,options:any)=>r2.put(key,value,options)};
+    const keyring=JSON.stringify({test:randomBytes(32).toString('hex')}),store=new ExecutionCredentials(bucket,keyring,'test');
+    const roles=await Promise.all(([['write',writer,writerSecret],['admin',admin,adminSecret]] as const).map(async([capability,role,secret])=>{const reference='sql-role/'+randomUUID();return {databaseId:ta,capability,destinationId:'cp6-approved',role,reference,readRole:target(ta).runtimeRole,writeRole:writer};}));
+    const configuration:Env={...env,TENANT_CREDENTIALS:bucket as R2Bucket,SQL_VAULT_KEYS:keyring,SQL_VAULT_KEY_ID:'test',DATABASE_EXECUTION_TARGETS:JSON.stringify(roles),BYODB_ALLOWED_DESTINATIONS:JSON.stringify([{id:'cp6-approved',hostname:'db.example.com',address:'8.8.8.8',port:5432,databases:[target(ta).database],roles:[writer,admin],schemas:['tenant_data']}])};
+    const execution=new PgExecutionService(config=>{expect(config.host).toBe('8.8.8.8');expect(config.ssl).toMatchObject({rejectUnauthorized:true,servername:'db.example.com'});return new Client({...config,options:'-c standard_conforming_strings=off',host:'127.0.0.1',port,ssl:{ca,rejectUnauthorized:true,servername:'localhost'}});});
+    const approvedHandler=createHandler(async()=>({clerkUserId:'owner',sessionId:'mocked'}),{transport},undefined,{execution});
+    const request=(action:string,payload:object)=>approvedHandler(new Request(`https://local.test/api/v1/workspaces/${wa}/databases/${ta}/${action}`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)}),configuration);
+    for(const [capability,secret] of [['write',writerSecret],['admin',adminSecret]])expect((await request('write-access',{action:'register',capability,password:secret,confirmation:'REGISTER '+target(ta).database})).status).toBe(200);
+    expect((await request('write-access',{enabled:true,confirmation:'ENABLE '+target(ta).database})).status).toBe(200);
+    const apply=async(sql:string,parameters:unknown[]=[])=>{const preview=await request('change-preview',{sql,parameters});expect(preview.status,await preview.clone().text()).toBe(200);const value=(await preview.json() as any).data;return request('change-execute',{sql:value.sql,parameters:value.parameters,approvalToken:value.approvalToken,confirmation:value.confirmation});};
+    expect((await apply('CREATE TABLE tenant_data.editor_records(id integer PRIMARY KEY,name text NOT NULL)')).status).toBe(200);
+    expect((await apply('INSERT INTO tenant_data.editor_records(id,name) VALUES ($1,$2)',[1,'actual inserted row'])).status).toBe(200);
+    expect(await (await call(`${wa}/databases/${ta}/query`,'POST',{sql:'SELECT * FROM tenant_data.editor_records'})).json()).toMatchObject({data:{rows:[{id:'1',name:'actual inserted row'}]}});
+    const literal="slash\\' ; DELETE FROM tenant_data.editor_records WHERE id=1; --";
+    expect((await apply("INSERT INTO tenant_data.editor_records(id,name) VALUES (9,'"+literal.replaceAll("'","''")+"')")).status).toBe(200);
+    await withClient(target(ta).database,'postgres',password,async c=>{expect((await c.query('SELECT name FROM tenant_data.editor_records WHERE id=9')).rows[0].name).toBe(literal);expect((await c.query('SELECT count(*)::int AS n FROM tenant_data.editor_records WHERE id=1')).rows[0].n).toBe(1);await c.query('DELETE FROM tenant_data.editor_records WHERE id=9');});
+    expect((await apply('UPDATE tenant_data.editor_records SET name=$1 WHERE id=$2',['updated',1])).status).toBe(200);
+    await withClient(target(ta).database,'postgres',password,async c=>{await c.query("INSERT INTO tenant_data.editor_records(id,name) SELECT n,'unchanged' FROM generate_series(2,1002) n");});
+    expect((await apply("UPDATE tenant_data.editor_records SET name='mass-change' WHERE 1=1")).status).toBe(409);
+    await withClient(target(ta).database,'postgres',password,async c=>{expect((await c.query("SELECT count(*)::int AS n FROM tenant_data.editor_records WHERE name='mass-change'")).rows[0].n).toBe(0);await c.query('DELETE FROM tenant_data.editor_records WHERE id>1');});
+    expect((await apply('ALTER TABLE tenant_data.editor_records ADD COLUMN age integer')).status).toBe(200);
+    expect((await apply('CREATE INDEX editor_name ON tenant_data.editor_records(name)')).status).toBe(200);
+    expect((await apply("INSERT INTO tenant_data.editor_records(id,name) VALUES (2,'first'),(1,'duplicate')")).status).toBe(503);
+    await withClient(target(ta).database,'postgres',password,async c=>{expect((await c.query('SELECT count(*)::int AS n FROM tenant_data.editor_records WHERE id=2')).rows[0].n).toBe(0);});
+    await withClient(target(ta).database,'postgres',password,async c=>{await c.query('CREATE TABLE tenant_data.cp6_cascade_child(id int REFERENCES tenant_data.editor_records(id) ON DELETE CASCADE)');});
+    expect((await request('change-preview',{sql:'DELETE FROM tenant_data.editor_records WHERE id=1',parameters:[]})).status).toBe(503);
+    await withClient(target(ta).database,'postgres',password,async c=>{await c.query('DROP TABLE tenant_data.cp6_cascade_child');});
+    expect((await apply('DELETE FROM tenant_data.editor_records WHERE id=$1',[1])).status).toBe(200);
+    expect((await apply('DROP TABLE tenant_data.editor_records')).status).toBe(200);
+    const otherDatabase={...roles[0],databaseId:tb};const tenantB=(await db.prepare('SELECT * FROM managed_tenant_databases WHERE id=?').bind(tb).first<TenantMetadata>())!;
+    await expect(execution.verify(configuration,tenantB,otherDatabase)).rejects.toThrow();
+  },30000);
   it("revoked vault entries disable runtime reads even with active D1 metadata",async()=>{
     await vault.revoke(`neon-runtime/${ta}`);
     expect((await call(`${wa}/databases/${ta}/schemas`)).status).toBe(503);

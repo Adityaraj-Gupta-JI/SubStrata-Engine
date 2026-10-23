@@ -99,7 +99,7 @@ export async function agentRoute(request: Request, env: Env, user: string, reque
         const id = crypto.randomUUID(), conversationId = crypto.randomUUID(), source = old.database_id ? await dataSource(env.METADATA, old.database_id, workspace, access.workspace.organization_id) : null;
         await audit('run', 'requested');
         await env.METADATA.batch([
-            env.METADATA.prepare('INSERT INTO ai_conversations(id,workspace_id,user_id,database_id,external_database_id,title,model,allow_rows) VALUES (?,?,?,?,?,?,?,?)').bind(conversationId, workspace, user, source?.kind === 'external' ? null : old.database_id, source?.kind === 'external' ? old.database_id : null, old.name, old.model, old.allow_rows),
+            env.METADATA.prepare('INSERT INTO ai_conversations(id,workspace_id,user_id,database_id,external_database_id,mysql_database_id,title,model,allow_rows) VALUES (?,?,?,?,?,?,?,?,?)').bind(conversationId, workspace, user, source?.kind === 'external' ? null : old.database_id, source?.kind === 'external' && source?.dialect!=='mysql' ? old.database_id : null,source?.dialect==='mysql'?old.database_id:null, old.name, old.model, old.allow_rows),
             env.METADATA.prepare("INSERT INTO agent_runs(id,agent_id,workspace_id,user_id,conversation_id,goal,configuration_json,status,deadline_at) VALUES (?,?,?,?,?,?,?,'running',?)").bind(id, old.id, workspace, user, conversationId, value.goal.replaceAll(key, '[redacted]'), JSON.stringify(publicAgent(old)), Date.now() + old.deadline_seconds * 1000),
         ]);
         const abort = new AbortController(), signal = AbortSignal.any([request.signal, abort.signal, AbortSignal.timeout(old.deadline_seconds * 1000)]);

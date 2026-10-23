@@ -1,3 +1,7 @@
+import type {MySQLTransport} from "./mysql/transport";
+import {mysqlConnectionRoute} from "./mysql/routes";
+import {executionRoute} from "./execution/routes";
+import type {ExecutionService} from "./execution/service";
 import {agentRoute} from "./agents/routes";
 import {membershipRoute} from "./access/routes";
 import {externalRoute} from "./byodb/routes";
@@ -25,7 +29,7 @@ function cors(request: Request, env: Env, response: Response): Response {
   return response;
 }
 
-async function route(request: Request, env: Env, requestId: string, authenticate: Authenticator, databases?: DatabaseServices, ai?: AIServices, context?: ExecutionContext,platform?:{external?:ExternalServices}): Promise<Response> {
+async function route(request: Request, env: Env, requestId: string, authenticate: Authenticator, databases?: DatabaseServices, ai?: AIServices, context?: ExecutionContext,platform?:{external?:ExternalServices;execution?:ExecutionService;mysql?:MySQLTransport}): Promise<Response> {
   const url = new URL(request.url);
   const path = url.pathname;
   const method = request.method;
@@ -46,6 +50,8 @@ async function route(request: Request, env: Env, requestId: string, authenticate
     const response=await aiRoute(request,env,user.id,requestId,databases,ai,context);
     if(response)return response;
   }
+  const mysql=await mysqlConnectionRoute(request,env,user.id,requestId,platform?.mysql);if(mysql)return mysql;
+  const execution=await executionRoute(request,env,user.id,requestId,platform?.execution);if(execution)return execution;
   if (path.match(/^\/api\/v1\/workspaces\/[^/]+\/databases(?:\/|$)/)) {
     const response = await databaseRoute(request, env, user.id, requestId, databases ?? defaultDatabaseServices(env, request));
     if (response) return response;
@@ -99,7 +105,7 @@ async function route(request: Request, env: Env, requestId: string, authenticate
   throw notFound();
 }
 
-export function createHandler(authenticate: Authenticator = verifySession, databases?: DatabaseServices, ai?: AIServices,platform?:{external?:ExternalServices}) {
+export function createHandler(authenticate: Authenticator = verifySession, databases?: DatabaseServices, ai?: AIServices,platform?:{external?:ExternalServices;execution?:ExecutionService;mysql?:MySQLTransport}) {
   return async (request: Request, env: Env, context?: ExecutionContext): Promise<Response> => {
     const requestId = crypto.randomUUID();
     if (request.method === "OPTIONS") {

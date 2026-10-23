@@ -1,3 +1,5 @@
+import {mysqlDatabaseAction} from "../mysql/routes";
+import type {MySQLTransport,MySQLSource} from "../mysql/transport";
 import {dataSource,dataSources} from "./sources";
 import {externalTransport} from "../byodb/service";
 import { ApiError, badRequest, json, notFound, unavailable } from "../errors";
@@ -11,6 +13,7 @@ import { developmentServices } from "../neon/development";
 
 export interface DatabaseServices {
   transport: ReadTransport;
+  mysql?:MySQLTransport;
   // Hosted provisioning must be wired ONLY with a durable external vault.
   provisioning?: { durableSecrets: true; service: TenantProvisioner };
 }
@@ -20,7 +23,7 @@ export function defaultDatabaseServices(env: Env, request: Request): DatabaseSer
   return {...managed,transport:{read:(tenant,sql,parameters,limit)=>tenant.kind==='external'?external.read(tenant,sql,parameters,limit):managed.transport.read(tenant,sql,parameters,limit)}};
 }
 function publicTenant(row: TenantMetadata) {
-  return { id: row.id, workspaceId: row.workspace_id, name: row.display_name??row.database_name, state: row.state, kind:row.kind??"managed",schema:row.schema_name??"tenant_data",
+  return { id: row.id, workspaceId: row.workspace_id, name: row.display_name??row.database_name, state: row.state, kind:row.kind??"managed",schema:row.schema_name??"tenant_data",dialect:row.dialect??"postgresql",
     retryAvailable: row.kind!=="external" && row.state === "failed" && !row.claim_id && row.last_error !== "QUARANTINE_REQUIRED",
     error: row.state === "failed" ? row.kind==="external"?"External connection unavailable. Review connection health in Databases.":"Provisioning requires attention. Retry when configuration is available." : null };
 }
@@ -108,6 +111,9 @@ export async function databaseRoute(request: Request, env: Env, userId: string, 
       if (result.truncated) throw new ApiError(413, "METADATA_LIMIT", "Schema metadata exceeds the inspection limit.");
       return result;
     };
+    if(tenant.dialect==='mysql'){
+      const source=await env.METADATA.prepare('SELECT * FROM mysql_databases WHERE id=? AND workspace_id=? AND organization_id=? AND disconnected=0').bind(tenant.id,workspaceId,access.workspace.organization_id).first<MySQLSource>();if(!source)throw notFound();const response=await mysqlDatabaseAction(request,env,source,action,requestId,services.mysql);await audit('success');return response;
+    }
     let data: unknown;
     const schema = url.searchParams.get("schema") ?? tenant.schema_name ?? "tenant_data";
     const table = url.searchParams.get("table") ?? "";
@@ -119,10 +125,10 @@ export async function databaseRoute(request: Request, env: Env, userId: string, 
       const relation = (await inspect("SELECT c.oid FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace WHERE n.nspname=$1 AND c.relname=$2 AND c.relkind IN ('r','p','v','m') AND has_table_privilege(current_user,c.oid,'SELECT')", [schema, table])).rows[0];
       if (!relation) throw notFound();
       if (action === "relation") {
-        const columns = await inspect("SELECT a.attname AS name, format_type(a.atttypid,a.atttypmod) AS type, a.attnotnull AS not_null FROM pg_attribute a WHERE a.attrelid=$1 AND a.attnum>0 AND NOT a.attisdropped ORDER BY a.attnum", [relation.oid]);
+        const columns = await inspect("SELECT a.attname AS name, format_type(a.atttypid,a.atttypmod) AS type, a.attnotnull AS not_null, a.atthasdef AS has_default FROM pg_attribute a WHERE a.attrelid=$1 AND a.attnum>0 AND NOT a.attisdropped ORDER BY a.attnum", [relation.oid]);
         const keys = await inspect("SELECT conname AS name, contype AS type, pg_get_constraintdef(oid) AS definition FROM pg_constraint WHERE conrelid=$1 AND contype IN ('p','f') ORDER BY conname", [relation.oid]);
         const indexes = await inspect("SELECT indexrelid::regclass::text AS name, pg_get_indexdef(indexrelid) AS definition FROM pg_index WHERE indrelid=$1 ORDER BY indexrelid", [relation.oid]);
-        data = { columns: columns.rows, keys: keys.rows, indexes: indexes.rows };
+        const primary=await inspect("SELECT a.attname AS name FROM pg_index i JOIN pg_attribute a ON a.attrelid=i.indrelid AND a.attnum=ANY(i.indkey) WHERE i.indrelid=$1 AND i.indisprimary ORDER BY a.attnum",[relation.oid]);data = { columns: columns.rows, keys: keys.rows, indexes: indexes.rows,primaryKey:primary.rows.map(r=>r.name) };
       } else {
         const page = pagination(url);
         const keys = await inspect("SELECT a.attname AS name FROM pg_index i JOIN pg_attribute a ON a.attrelid=i.indrelid AND a.attnum=ANY(i.indkey) WHERE i.indrelid=$1 AND i.indisprimary ORDER BY a.attnum", [relation.oid]);
