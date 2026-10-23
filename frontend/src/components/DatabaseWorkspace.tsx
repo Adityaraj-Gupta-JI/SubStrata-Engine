@@ -5,7 +5,7 @@ import { useAuth } from "@clerk/nextjs";
 import { databaseApi, type DatabaseList, type ResultGrid } from "@/lib/api/databases";
 import { platformToken } from "@/lib/api/platform";
 
-export interface SqlDraft {workspaceId:string;databaseId:string;sql:string;conversationId:string}
+export interface SqlDraft {workspaceId:string;databaseId:string;sql:string;conversationId:string;source?:"ai"|"explorer"}
 export const WorkspaceSelectionContext = createContext<{ workspaceId: string; databaseId: string; setDatabaseId: (id: string) => void; sqlDraft:SqlDraft|null;setSqlDraft:(draft:SqlDraft|null)=>void } | null>(null);
 export function useDatabaseWorkspace() {
   const selection = useContext(WorkspaceSelectionContext);
@@ -31,7 +31,8 @@ export function useDatabaseWorkspace() {
   }, [selection.workspaceId, token]);
   useEffect(() => { const state = generation.current; void Promise.resolve().then(refresh); return () => { state.value++; }; }, [refresh]);
   const database = list?.data.find(row => row.id === selection.databaseId);
-  const setDatabaseId = (id: string) => { if (currentWorkspace.current === selection.workspaceId) selection.setDatabaseId(id); };
+  const {workspaceId,setDatabaseId:selectDatabase}=selection;
+  const setDatabaseId = useCallback((id: string) => { if (currentWorkspace.current === workspaceId) selectDatabase(id); },[workspaceId,selectDatabase]);
   return { ...selection, setDatabaseId, list, database, error, loading, refresh, token };
 }
 export function DatabaseSelector({ workspace }: { workspace: ReturnType<typeof useDatabaseWorkspace> }) {
@@ -44,7 +45,7 @@ export function DatabaseSelector({ workspace }: { workspace: ReturnType<typeof u
     {!workspace.workspaceId && <p role="status">Select a workspace in the sidebar.</p>}
     {workspace.loading && <p role="status">Loading databases…</p>}
     {workspace.error && <p role="alert" className="text-[#ff8da8]">{workspace.error}</p>}
-    {workspace.list && !workspace.list.data.length && <p>No tenant database has been provisioned for this workspace.</p>}
+    {workspace.list && !workspace.list.data.length && <p>No managed or external database is connected to this workspace.</p>}
   </div>;
 }
 export function ResultTable({ result }: { result: ResultGrid }) {

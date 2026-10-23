@@ -95,7 +95,8 @@ export async function mysqlDatabaseAction(request: Request, env: Env, source: My
                 throw notFound();
             if (action === 'relation') {
                 const indexes = (await transport.rows(connection, 'SELECT INDEX_NAME AS name, COLUMN_NAME AS definition FROM information_schema.STATISTICS WHERE TABLE_SCHEMA=? AND TABLE_NAME=? ORDER BY INDEX_NAME,SEQ_IN_INDEX LIMIT 100', [schema, table])).rows;
-                return { columns, keys: columns.filter(c => c.column_key === 'PRI').map(c => ({ name: c.name, type: 'p', definition: 'PRIMARY KEY' })), indexes, primaryKey: columns.filter(c => c.column_key === 'PRI').map(c => c.name) };
+                const foreignKeys = (await transport.rows(connection, 'SELECT CONSTRAINT_NAME AS name,COLUMN_NAME AS `column`,REFERENCED_TABLE_NAME AS target_table,REFERENCED_COLUMN_NAME AS target_column FROM information_schema.KEY_COLUMN_USAGE WHERE TABLE_SCHEMA=? AND TABLE_NAME=? AND REFERENCED_TABLE_SCHEMA=? AND REFERENCED_TABLE_NAME IS NOT NULL ORDER BY CONSTRAINT_NAME,ORDINAL_POSITION LIMIT 100', [schema, table, schema])).rows;
+                return { columns, keys: columns.filter(c => c.column_key === 'PRI').map(c => ({ name: c.name, type: 'p', definition: 'PRIMARY KEY' })), indexes, foreignKeys, primaryKey: columns.filter(c => c.column_key === 'PRI').map(c => c.name) };
             }
             const offset = Number(url.searchParams.get('offset') ?? 0), limit = Number(url.searchParams.get('limit') ?? 20);
             if (!Number.isInteger(offset) || offset < 0 || offset > 10000 || !Number.isInteger(limit) || limit < 1 || limit > 100)

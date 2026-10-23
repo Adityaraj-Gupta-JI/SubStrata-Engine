@@ -1,3 +1,4 @@
+import {tableSelect} from "../../frontend/src/lib/product-workflow";
 import {PgExecutionService,ExecutionCredentials} from "../src/execution/service";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { Client } from "pg";
@@ -154,7 +155,7 @@ describe.runIf(enabled)("gateway with real TLS PostgreSQL + D1 (mocked Clerk ide
       const response = await call(`${wa}/databases/${ta}/${action}`);
       expect(response.status).toBe(200);
       const body = await response.json() as { data: Record<string, unknown> };
-      if (action.startsWith("relation")) { expect(body.data.keys).toHaveLength(2); expect(body.data.indexes).toHaveLength(2); }
+      if (action.startsWith("relation")) { expect(body.data.keys).toHaveLength(2); expect(body.data.indexes).toHaveLength(2); expect(body.data.foreignKeys).toEqual([{name:"items_department_id_fkey",column:"department_id",target_table:"departments",target_column:"id"}]); }
       if (action.startsWith("rows")) { expect(body.data.rows).toHaveLength(20); expect(body.data.stableOrder).toBe(true); }
     }
   });
@@ -243,8 +244,8 @@ describe.runIf(enabled)("gateway with real TLS PostgreSQL + D1 (mocked Clerk ide
       expect((await databaseApi.tables(wa,ta,"tenant_data","owner")).data.some(row=>row.name==="items_view")).toBe(true);
       expect((await databaseApi.relation(wa,ta,"tenant_data","items","owner")).data.keys).toHaveLength(2);
       expect((await databaseApi.rows(wa,ta,"tenant_data","items",100,"owner")).data.rows[0].id).toBe("101");
-      const query = await databaseApi.query(wa,ta,"SELECT name FROM tenant_data.items LIMIT 2","owner");
-      expect(query.data.rows).toHaveLength(2);
+      const query = await databaseApi.query(wa,ta,tableSelect("tenant_data","items"),"owner");
+      expect(query.data.rows).toHaveLength(20);
       await expect(databaseApi.provision(wa,"owner")).rejects.toMatchObject({status:503});
       await expect(databaseApi.retry(wa,ta,"owner")).rejects.toMatchObject({status:409});
     } finally { vi.unstubAllGlobals(); if(previous===undefined) delete process.env.NEXT_PUBLIC_PLATFORM_API_URL; else process.env.NEXT_PUBLIC_PLATFORM_API_URL=previous; }
