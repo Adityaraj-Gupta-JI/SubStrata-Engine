@@ -1,3 +1,7 @@
+# CP8A staging authentication correction
+
+For the first isolated staging deployment, use [the staging release procedure](staging-release.md). Customize the normal Clerk session token with the staging audience and leave `NEXT_PUBLIC_CLERK_JWT_TEMPLATE` unset. Current Clerk documentation does not support session-bound `sid` in custom JWT templates; older template setup advice below is superseded for staging. Keep all existing issuer/signature/audience/session checks.
+
 # CP2-LIVE owner readiness checklist
 
 All steps below are preparation. Provisioning stays disabled; no cloud creation, secret upload, deployment, or live database mutation is authorized by this checklist.

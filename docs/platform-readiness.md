@@ -1,3 +1,7 @@
+# CP8A staging authentication correction
+
+For isolated staging, follow [the staging release procedure](staging-release.md). Use a normal Clerk session token customized with `aud`, not a custom JWT template requiring `sid`. Leave `NEXT_PUBLIC_CLERK_JWT_TEMPLATE` unset. This corrects earlier template setup advice without weakening the API verifier.
+
 # Platform integration and hosting readiness
 
 There are two applications: `frontend/` is the OpenNext Next.js Worker (`substrata-engine`, `ASSETS` binding); `worker/` is the API Worker (`substrata-api`, `METADATA` D1 binding). The legacy Python backend is separate. Its SQL execution and tenant inspection endpoints remain disabled.

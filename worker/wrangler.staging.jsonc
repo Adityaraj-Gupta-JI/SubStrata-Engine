@@ -1,0 +1,26 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "substrata-api-staging",
+  "account_id": "REPLACE_WITH_CLOUDFLARE_ACCOUNT_ID",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-10-22",
+  "compatibility_flags": ["nodejs_compat"],
+  "workers_dev": true,
+  "preview_urls": false,
+  "observability": { "enabled": true, "logs": { "enabled": true }, "traces": { "enabled": true, "head_sampling_rate": 0.01 } },
+  // Owner must replace the sentinel with the NEW staging D1 UUID. Never reuse production.
+  "d1_databases": [{ "binding": "METADATA", "database_name": "substrata-metadata-staging", "database_id": "REPLACE_WITH_STAGING_D1_ID", "migrations_dir": "migrations" }],
+  "r2_buckets": [{ "binding": "TENANT_CREDENTIALS", "bucket_name": "substrata-credentials-staging" }],
+  "vars": {
+    "FRONTEND_ORIGIN": "https://substrata-v2-staging.REPLACE_WITH_WORKERS_SUBDOMAIN.workers.dev",
+    "CLERK_ISSUER": "https://REPLACE_WITH_STAGING_CLERK_ISSUER.invalid",
+    "CLERK_AUDIENCE": "substrata-api-staging",
+    "WORKSPACE_MEMBERSHIP_MODE": "d1",
+    "AI_VAULT_KEY_ID": "staging-v1",
+    "BYODB_ALLOWED_DESTINATIONS": "[]",
+    "MYSQL_ALLOWED_DESTINATIONS": "[]",
+    "DATABASE_EXECUTION_TARGETS": "[]"
+  }
+  // CLERK_SECRET_KEY and AI_VAULT_KEYS are Worker secrets, never vars.
+  // NEON_PROVISIONING_APPROVAL, admin secrets and SQL_VAULT_* remain absent.
+}
