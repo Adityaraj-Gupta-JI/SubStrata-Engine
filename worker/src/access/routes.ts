@@ -43,16 +43,17 @@ export async function membershipRoute(request: Request, env: Env, user: string, 
     if (remove) {
         if (!old)
             throw notFound();
-        mutation = env.METADATA.prepare(`DELETE FROM workspace_memberships WHERE workspace_id=? AND user_id=? AND (role<>'owner' OR ${ownerGuard}) AND ${actorGuard("workspace_memberships.role='owner'")} AND ${targetGuard}`).bind(workspace, target, ...parameters, ...actor, ...targetParameters);
+        mutation = env.METADATA.prepare(`DELETE FROM workspace_memberships WHERE workspace_id=? AND user_id=? AND (role<>'owner' OR ${ownerGuard}) AND ${actorGuard("workspace_memberships.role='owner'")} AND ${targetGuard} RETURNING user_id`).bind(workspace, target, ...parameters, ...actor, ...targetParameters);
     }
     else if (old) {
         const privileged = ['owner', 'admin'].includes(String(value.role)) ? "1=1" : "workspace_memberships.role='owner'";
-        mutation = env.METADATA.prepare(`UPDATE workspace_memberships SET role=? WHERE workspace_id=? AND user_id=? AND (role<>'owner' OR ?='owner' OR ${ownerGuard}) AND ${actorGuard(privileged)} AND ${targetGuard}`).bind(value.role, workspace, target, value.role, ...parameters, ...actor, ...targetParameters);
+        mutation = env.METADATA.prepare(`UPDATE workspace_memberships SET role=? WHERE workspace_id=? AND user_id=? AND (role<>'owner' OR ?='owner' OR ${ownerGuard}) AND ${actorGuard(privileged)} AND ${targetGuard} RETURNING user_id`).bind(value.role, workspace, target, value.role, ...parameters, ...actor, ...targetParameters);
     }
     else
-        mutation = env.METADATA.prepare(`INSERT INTO workspace_memberships(id,workspace_id,user_id,role) SELECT ?,?,?,? WHERE ${actorGuard(['owner', 'admin'].includes(String(value.role)) ? '1=1' : '1=0')} AND ${targetGuard}`).bind(crypto.randomUUID(), workspace, target, value.role, ...actor, ...targetParameters);
+        mutation = env.METADATA.prepare(`INSERT INTO workspace_memberships(id,workspace_id,user_id,role) SELECT ?,?,?,? WHERE ${actorGuard(['owner', 'admin'].includes(String(value.role)) ? '1=1' : '1=0')} AND ${targetGuard} RETURNING user_id`).bind(crypto.randomUUID(), workspace, target, value.role, ...actor, ...targetParameters);
     const results = await env.METADATA.batch([mutation, env.METADATA.prepare("INSERT INTO audit_events(id,organization_id,actor_user_id,action,resource_type,resource_id,outcome,request_id) SELECT ?,?,?,?,'workspace',?,'success',? WHERE changes()=1").bind(crypto.randomUUID(), org, user, remove ? 'member.remove' : 'member.role', workspace, requestId)]);
-    if (results[0].meta.changes !== 1)
+    // RETURNING counts the guarded target row, excluding permission-version trigger writes.
+    if (results[0].results.length !== 1)
         throw new ApiError(409, 'LAST_WORKSPACE_OWNER', 'The last active workspace owner cannot be removed or demoted. Permissions may have changed; refresh before retrying.');
     return json({ data: { updated: true, authority: 'd1' }, requestId }, 200, requestId);
 }

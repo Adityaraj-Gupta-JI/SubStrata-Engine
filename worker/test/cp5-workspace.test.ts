@@ -39,6 +39,8 @@ beforeAll(async () => {
     env = { METADATA: db, BYODB_ALLOWED_DESTINATIONS: JSON.stringify([destination]), BYODB_VAULT_KEYS: ring, BYODB_VAULT_KEY_ID: 'test', TENANT_CREDENTIALS: bucket as R2Bucket };
     for (const name of ['0001_metadata.sql', '0002_neon_poc.sql', '0003_ai_workspace.sql', '0004_external_databases.sql', '0005_agent_workflows.sql','0007_mysql_databases.sql','0008_mysql_ai_context.sql'])
         await db.batch(readFileSync(new URL('../migrations/' + name, import.meta.url), 'utf8').split(';').map(s => s.trim()).filter(Boolean).map(s => db.prepare(s)));
+    // Include the real permission-version triggers: D1 meta.changes includes their writes.
+    await db.batch(readFileSync(new URL('../migrations/0006_sql_approvals.sql', import.meta.url), 'utf8').split('\n').map(s => s.trim()).filter(Boolean).map(s => db.prepare(s)));
     for (let i = 0; i < users.length; i++)
         await db.prepare('INSERT INTO users(id,clerk_user_id) VALUES (?,?)').bind(users[i], 'clerk-' + i).run();
     await db.batch([db.prepare("INSERT INTO organizations(id,slug,name,created_by) VALUES ('org','org','Org',?)").bind(users[0]), ...users.map((u, i) => db.prepare("INSERT INTO memberships(id,organization_id,user_id,role) VALUES (?,'org',?,?)").bind('m' + i, u, i === 0 ? 'owner' : 'member')), db.prepare("INSERT INTO workspaces(id,organization_id,slug,name,created_by) VALUES (?,'org','a','A',?),(?,'org','b','B',?)").bind(wa, users[0], wb, users[0]), ...users.slice(1).map((u, i) => db.prepare('INSERT INTO workspace_memberships(id,workspace_id,user_id,role) VALUES (?,?,?,?)').bind('w' + i, wa, u, i === 0 ? 'admin' : 'viewer'))]);
@@ -128,6 +130,19 @@ describe('Agents: real D1 persistence, mocked Clerk/provider/SQL', () => {
     it('retains history after soft deletion and rejects new invocations', async () => { expect((await call(path() + `/agents/${agent}`, 'POST', { action: 'delete' })).status).toBe(200); expect((await body(await call(path() + '/agents'))).data).toHaveLength(0); expect((await call(path() + `/agents/${agent}/run`, 'POST', { goal: 'No' })).status).toBe(404); expect((await body(await call(path() + '/agent-runs'))).data.length).toBeGreaterThan(0); });
 });
 describe('Workspace memberships and explicit D1 authority', () => {
+    it('reports guarded target-row success despite permission-version trigger writes', async () => {
+        const target=crypto.randomUUID();
+        await db.prepare("INSERT INTO users(id,clerk_user_id) VALUES (?,?)").bind(target,'fixture-'+target).run();
+        await db.prepare("INSERT INTO memberships(id,organization_id,user_id,role) VALUES (?,'org',?,'member')").bind(crypto.randomUUID(),target).run();
+        const version=async()=>Number((await db.prepare('SELECT version FROM workspace_permission_versions WHERE workspace_id=?').bind(wa).first<{version:number}>())!.version);
+        const before=await version();
+        expect((await call(path()+`/members/${target}`,'POST',{role:'viewer'})).status).toBe(200);
+        expect(await version()).toBe(before+1);
+        expect((await call(path()+`/members/${target}`,'POST',{role:'member'})).status).toBe(200);
+        expect((await call(path()+`/members/${target}`,'POST',{action:'remove'})).status).toBe(200);
+        expect(await db.prepare('SELECT id FROM workspace_memberships WHERE workspace_id=? AND user_id=?').bind(wa,target).first()).toBeNull();
+        expect(await version()).toBe(before+3);
+    });
     it('lists roles, audits allowed changes, blocks viewers and admin privilege escalation', async () => { const list = await body(await call(path() + '/members')); expect(list.authority).toBe('d1'); expect(list.clerkOrganizationSync).toBe('not-linked'); expect(list.invitations.available).toBe(false); expect((await call(path() + `/members/${users[2]}`, 'POST', { role: 'member' }, '2')).status).toBe(403); for (const role of ['admin', 'owner'])
         expect((await call(path() + `/members/${users[2]}`, 'POST', { role }, '1')).status).toBe(403); expect((await call(path() + `/members/${users[2]}`, 'POST', { role: 'member' }, '1')).status).toBe(200); expect((await db.prepare("SELECT count(*) AS n FROM audit_events WHERE action='member.role'").first<{
         n: number;
