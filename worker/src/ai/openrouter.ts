@@ -1,16 +1,26 @@
 import { ApiError } from "../errors";
 import type { AIProvider, ChatMessage, Completion, Model, ToolDefinition, ToolCall } from "./contracts";
-const fail = (status = 502, code = "AI_PROVIDER_ERROR", message = "OpenRouter request failed.") => new ApiError(status, code, message);
+const fail = (status = 502, code = "AI_RESPONSE_INVALID", message = "OpenRouter returned an unexpected response. Try again later.") => new ApiError(status, code, message);
 export function providerFailure(status: number): ApiError {
-    if (status === 401 || status === 403)
+    if (status >= 300 && status < 400)
+        return fail(502, "AI_REDIRECT_BLOCKED", "OpenRouter returned an unexpected redirect. It was blocked to protect your credential.");
+    if (status === 401)
         return fail(401, "AI_KEY_INVALID", "OpenRouter rejected the key.");
+    if (status === 403)
+        return fail(403, "AI_ACCESS_DENIED", "OpenRouter blocked this request. Check your account, key permissions and model restrictions.");
+    if (status === 400)
+        return fail(400, "AI_INVALID_REQUEST", "OpenRouter could not accept this request. Check the selected model and supported parameters.");
+    if (status === 404)
+        return fail(404, "AI_MODEL_UNAVAILABLE", "The requested OpenRouter model or endpoint is unavailable. Refresh models and select an available model.");
     if (status === 402)
         return fail(402, "AI_CREDITS_EXHAUSTED", "OpenRouter credits are exhausted.");
     if (status === 429)
         return fail(429, "AI_RATE_LIMIT", "OpenRouter rate limit reached. Try again later.");
     if (status === 408 || status === 504)
         return fail(504, "AI_TIMEOUT", "OpenRouter request timed out.");
-    return fail();
+    if (status >= 500 && status <= 599)
+        return fail(status === 503 ? 503 : 502, "AI_PROVIDER_UNAVAILABLE", "OpenRouter or the selected model provider is unavailable. Try again later.");
+    return fail(502, "AI_PROVIDER_ERROR", "OpenRouter could not complete this request. Try again later.");
 }
 export function validateKey(key: unknown): asserts key is string {
     if (typeof key !== "string" || key.length < 16 || key.length > 512 || !/^[!-~]+$/.test(key))
@@ -19,13 +29,14 @@ export function validateKey(key: unknown): asserts key is string {
 export const modelId = (id: unknown): id is string => typeof id === "string" && /^[a-zA-Z0-9][a-zA-Z0-9._:/-]{1,199}$/.test(id);
 const record = (value: unknown): Record<string, unknown> => value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : {};
 export class OpenRouterProvider implements AIProvider {
-    constructor(private readonly send: typeof fetch = fetch, private readonly timeoutMs = 25000) { }
+    // Native workerd fetch requires its global receiver; do not store it as an object method.
+    constructor(private readonly send: typeof fetch = (input, init) => fetch(input, init), private readonly timeoutMs = 25000) { }
     private async request(path: string, key: string, signal?: AbortSignal, body?: object): Promise<Record<string, unknown>> {
         validateKey(key);
         const timeout = AbortSignal.timeout(this.timeoutMs);
         const combined = signal ? AbortSignal.any([signal, timeout]) : timeout;
         try {
-            const response = await this.send(`https://openrouter.ai/api/v1${path}`, { method: body ? "POST" : "GET", redirect: "error", signal: combined, headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json", "X-Title": "SubStrata Engine" }, ...(body ? { body: JSON.stringify(body) } : {}) });
+            const response = await this.send(`https://openrouter.ai/api/v1${path}`, { method: body ? "POST" : "GET", redirect: "manual", signal: combined, headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json", "X-Title": "SubStrata Engine" }, ...(body ? { body: JSON.stringify(body) } : {}) });
             if (!response.ok) {
                 await response.body?.cancel();
                 throw providerFailure(response.status);
@@ -66,7 +77,9 @@ export class OpenRouterProvider implements AIProvider {
                 throw fail(504, "AI_TIMEOUT", "OpenRouter request timed out.");
             if (error instanceof ApiError)
                 throw error;
-            throw fail();
+            if (error instanceof SyntaxError)
+                throw fail();
+            throw fail(502, "AI_NETWORK_ERROR", "Could not reach OpenRouter. Check the API server's network, DNS and TLS connectivity.");
         }
     }
     async validate(key: string, signal?: AbortSignal) {
@@ -90,7 +103,7 @@ export class OpenRouterProvider implements AIProvider {
         const timeout = AbortSignal.timeout(this.timeoutMs), combined = signal ? AbortSignal.any([signal, timeout]) : timeout;
         let reader: ReadableStreamDefaultReader<Uint8Array> | undefined;
         try {
-            const response = await this.send("https://openrouter.ai/api/v1/chat/completions", { method: "POST", redirect: "error", signal: combined, headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json", "X-Title": "SubStrata Engine" }, body: JSON.stringify({ ...body, stream: true, stream_options: { include_usage: true } }) });
+            const response = await this.send("https://openrouter.ai/api/v1/chat/completions", { method: "POST", redirect: "manual", signal: combined, headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json", "X-Title": "SubStrata Engine" }, body: JSON.stringify({ ...body, stream: true, stream_options: { include_usage: true } }) });
             if (!response.ok) {
                 await response.body?.cancel();
                 throw providerFailure(response.status);
@@ -185,7 +198,9 @@ export class OpenRouterProvider implements AIProvider {
                 throw fail(504, "AI_TIMEOUT", "OpenRouter request timed out.");
             if (error instanceof ApiError)
                 throw error;
-            throw fail();
+            if (error instanceof SyntaxError)
+                throw fail();
+            throw fail(502, "AI_NETWORK_ERROR", "The connection to OpenRouter failed. Check the API server's network, DNS and TLS connectivity.");
         }
         finally {
             await reader?.cancel().catch(() => undefined);

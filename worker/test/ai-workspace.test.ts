@@ -96,6 +96,16 @@ describe("AI vertical slice: real local encrypted R2 + D1; mocked OpenRouter, Cl
         expect((await call("/ai/providers/openrouter", "POST", { key: secret, userId: userB })).status).toBe(400);
     });
     it("rejects invalid provider credentials without storing a key", async () => { providerStatus = 401; const result = await call("/ai/providers/openrouter", "POST", { key: secret }); expect(result.status).toBe(401); expect(await result.text()).not.toContain(secret); expect(await db.prepare("SELECT * FROM ai_provider_credentials").first()).toBeNull(); });
+    it('propagates sanitized provider failure categories through the settings API without saving credentials',async()=>{
+        for(const [upstream,status,code] of [[400,400,'AI_INVALID_REQUEST'],[402,402,'AI_CREDITS_EXHAUSTED'],[403,403,'AI_ACCESS_DENIED'],[404,404,'AI_MODEL_UNAVAILABLE'],[429,429,'AI_RATE_LIMIT'],[503,503,'AI_PROVIDER_UNAVAILABLE']] as const){
+            providerStatus=upstream;
+            const result=await call('/ai/providers/openrouter','POST',{action:'save',key:secret});
+            expect(result.status).toBe(status);
+            const text=await result.text();expect(text).not.toContain(secret);
+            expect(JSON.parse(text).error.code).toBe(code);
+            expect(await db.prepare('SELECT * FROM ai_provider_credentials').first()).toBeNull();
+        }
+    });
     it("validates and saves encrypted BYOK; APIs and D1 never return plaintext or references", async () => {
         const result = await call("/ai/providers/openrouter", "POST", { key: secret });
         expect(result.status).toBe(200);
