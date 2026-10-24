@@ -34,6 +34,60 @@ export async function browserErrors(tab){
     message:entry.message.replace(/(?:sk-or-v1-|sk_test_|sk_live_)[A-Za-z0-9_-]+/g,'[key redacted]').replace(/eyJ[A-Za-z0-9_.-]+/g,'[token redacted]').replace(/https?:\/\/[^\s)]+/g,value=>{try{const url=new URL(value);return url.origin+url.pathname;}catch{return '[URL redacted]';}}),
   }));
 }
+// Only run while test/browser/fixture-worker.ts is the local API entry point.
+// These checks are mocked-provider acceptance, never real OpenRouter acceptance.
+export async function fixtureChatSmoke(tab){
+  await tab.goto(base+'/chat');
+  await tab.playwright.locator('#ai-model option[value="cp8c/alternate"]').waitFor({state:'attached',timeoutMs:30000});
+  await tab.playwright.getByRole('button',{name:'New conversation',exact:true}).click();
+  await tab.playwright.locator('#ai-model').selectOption('cp8c/alternate');
+  assert.equal(await tab.playwright.getByRole('button',{name:'Send',exact:true}).isEnabled(),false,'Empty message must not submit');
+  await tab.playwright.locator('#ai-message').fill('CP8C fixture:error');
+  await tab.playwright.getByRole('button',{name:'Send',exact:true}).click();
+  await tab.playwright.getByRole('heading',{name:'OpenRouter · failed',exact:true}).waitFor({state:'visible',timeoutMs:30000});
+  await tab.playwright.locator('#ai-message').fill('CP8C recover from fixture error');
+  await tab.playwright.getByRole('button',{name:'Send',exact:true}).click();
+  await tab.playwright.getByRole('heading',{name:'OpenRouter · completed',exact:true}).waitFor({state:'visible',timeoutMs:30000});
+  const conversation=new URL(await tab.url()).hash;
+  await tab.reload();
+  await tab.playwright.getByRole('heading',{name:'OpenRouter · completed',exact:true}).waitFor({state:'visible',timeoutMs:30000});
+  assert.equal(new URL(await tab.url()).hash,conversation,'Conversation selection lost on refresh');
+  await tab.playwright.locator('#ai-model option[value="cp8c/alternate"]').waitFor({state:'attached',timeoutMs:30000});
+  assert.equal(await tab.playwright.locator('#ai-model').evaluate(e=>e.value),'cp8c/alternate');
+  return {provider:'MOCKED',journey:'model switching → empty denial → provider error → recovery → conversation refresh',result:'passed'};
+}
+export async function fixtureAgentTerminalSmoke(tab){
+  await tab.goto(base+'/agents');
+  await tab.playwright.getByLabel('Saved agent',{exact:false}).locator('option').filter({hasText:'CP8C fixture data explorer'}).waitFor({state:'attached',timeoutMs:30000});
+  await tab.playwright.getByLabel('Saved agent',{exact:false}).selectOption({label:'CP8C fixture data explorer'});
+  // Terminal-state checks do not depend on the separate PostgreSQL fixture lifetime.
+  await tab.playwright.locator('#database-selector').selectOption('');
+  await tab.playwright.getByRole('button',{name:'Save configuration',exact:true}).click();
+  await tab.playwright.getByText('Agent configuration saved. Run uses this saved configuration.',{exact:true}).waitFor({state:'visible',timeoutMs:15000});
+  await tab.playwright.getByLabel('Goal',{exact:false}).fill('CP8C fixture:loop regression');
+  await tab.playwright.getByRole('button',{name:'Run / retry as new execution',exact:true}).click();
+  await tab.playwright.getByText('Execution failed.',{exact:true}).waitFor({state:'visible',timeoutMs:30000});
+  assert.equal(await tab.playwright.getByRole('button',{name:'Request cancellation',exact:true}).isEnabled(),false,'Terminal run offered cancellation');
+  const goal=`CP8C fixture:wait cancellation regression ${Date.now()}`;
+  await tab.playwright.getByLabel('Goal',{exact:false}).fill(goal);
+  await tab.playwright.getByRole('button',{name:'Run / retry as new execution',exact:true}).click();
+  await tab.playwright.getByText('Running… Keep this page open.',{exact:true}).waitFor({state:'visible',timeoutMs:15000});
+  const run=new URL(await tab.url()).hash;
+  assert.match(run,/^#run=[a-f0-9-]{36}$/,'Run identity must be persisted before completion');
+  assert.equal(await tab.playwright.getByRole('link',{name:'Open original conversation and review SQL proposals',exact:true}).count(),0,'Previous conversation leaked into new execution');
+  await tab.playwright.getByRole('button',{name:'Request cancellation',exact:true}).click();
+  const cancelled=tab.playwright.getByText(new RegExp(`${goal}\\s*·\\s*cancelled`));
+  for(let attempt=0;attempt<25;attempt++){
+    await tab.playwright.getByRole('button',{name:'Refresh persisted status',exact:true}).click();
+    try{await cancelled.waitFor({state:'visible',timeoutMs:1000});break;}catch{if(attempt===24)throw new Error('Cancellation did not persist within the bounded recovery window');}
+  }
+  await tab.reload();
+  for(let attempt=0;attempt<25;attempt++){
+    try{await tab.playwright.getByText('Persisted status: cancelled',{exact:false}).waitFor({state:'visible',timeoutMs:1000});break;}catch{if(attempt===24)throw new Error('Cancelled run did not restore after refresh');}
+  }
+  assert.equal(new URL(await tab.url()).hash,run,'Refresh restored the wrong run');
+  return {provider:'MOCKED',journey:'step bound → cancellation → correct refresh recovery',result:'passed'};
+}
 export async function onboardingSmoke(tab){
   await tab.goto(base+'/onboarding');
   await tab.playwright.getByRole('button',{name:'Create or select a workspace',exact:true}).click();

@@ -134,7 +134,10 @@ afterAll(async () => {
   if(browserWorkspace&&browserSeeded){
     const deadline=Date.now()+60*60*1000;
     while(browserOwned&&!existsSync(join(browserDir,'stop'))&&Date.now()<deadline)await new Promise(resolve=>setTimeout(resolve,500));
-    try { browserMetadata(`DELETE FROM managed_tenant_databases WHERE id='${ta}' AND workspace_id='${browserWorkspace}';`); } catch(error) { cleanupError=error; }
+    // Only records bound to this random, owned disposable database are eligible.
+    const conversations=`SELECT id FROM ai_conversations WHERE database_id='${ta}' AND workspace_id='${browserWorkspace}'`;
+    const runs=`SELECT id FROM agent_runs WHERE conversation_id IN (${conversations})`;
+    try { browserMetadata(`DELETE FROM agent_run_steps WHERE run_id IN (${runs}); DELETE FROM agent_runs WHERE id IN (${runs}); DELETE FROM agent_definitions WHERE database_id='${ta}' AND workspace_id='${browserWorkspace}'; DELETE FROM ai_conversations WHERE id IN (${conversations}); DELETE FROM managed_tenant_databases WHERE id='${ta}' AND workspace_id='${browserWorkspace}';`); } catch(error) { cleanupError=error; }
     for(const path of [browserRuntime,browserSeed,join(browserDir,'ca.crt')])if(existsSync(path))unlinkSync(path);
     if(existsSync(join(browserDir,'stop')))unlinkSync(join(browserDir,'stop'));
   }
