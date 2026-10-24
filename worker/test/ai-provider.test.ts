@@ -43,6 +43,17 @@ describe("OpenRouter official HTTP contract (mocked provider, no live calls)", (
         abort.abort();
         await expect(request).rejects.toMatchObject({ code: "AI_CANCELLED" });
     });
+    it('sanitizes streaming timeouts and network failures without emitting a successful response', async () => {
+        const delta = vi.fn();
+        const waiting: typeof fetch = async (_input, init) => new Promise((_resolve, reject) => {
+            init!.signal!.addEventListener('abort', () => reject(new Error(key)), {once:true});
+        });
+        await expect(new OpenRouterProvider(waiting, 10).complete(key, 'test/model', [], [], undefined, delta)).rejects.toMatchObject({code:'AI_TIMEOUT',status:504});
+        const broken = new OpenRouterProvider(async () => { throw new Error(key); });
+        try { await broken.complete(key, 'test/model', [], [], undefined, delta); throw new Error('Expected provider failure'); }
+        catch (error) { expect(error).toMatchObject({code:'AI_NETWORK_ERROR',status:502}); expect(String(error)).not.toContain(key); }
+        expect(delta).not.toHaveBeenCalled();
+    });
     it("streams actual SSE deltas and redacts a key split across frames", async () => {
         const header = "x".repeat(key.length + 30) + " Header ";
         const frames = [header, key.slice(0, 9), key.slice(9), " tail"].map(content => `data: ${JSON.stringify({ choices: [{ delta: { content } }] })}\n\n`).join("") + `data: ${JSON.stringify({ choices: [{ delta: {}, finish_reason: "stop" }], usage: { prompt_tokens: 2, completion_tokens: 3, total_tokens: 5 } })}\n\ndata: [DONE]\n\n`;

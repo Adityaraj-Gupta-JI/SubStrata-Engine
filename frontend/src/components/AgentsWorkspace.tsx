@@ -78,7 +78,7 @@ function AgentsBody({ workspace }: {
     } },[workspaceId,token]);
     useEffect(()=>{const restore=()=>{const id=new URLSearchParams(window.location.hash.slice(1)).get("run");if(id&&workspaceId)void inspect(id);};restore();window.addEventListener("hashchange",restore);return()=>window.removeEventListener("hashchange",restore);},[workspaceId,inspect]);
     async function run(e: FormEvent) { e.preventDefault(); if (!selected || running)
-        return; setRunning(true); setError(''); setNotice('Starting foreground execution…'); setMessages([]); setSteps([]); setDelta(''); setRunId(''); setConversationId(''); activeRun.current = ''; const abort = new AbortController(); controller.current = abort; try {
+        return; window.history.replaceState(null,"",window.location.pathname); setRunning(true); setError(''); setNotice('Starting foreground execution…'); setMessages([]); setSteps([]); setDelta(''); setRunId(''); setConversationId(''); activeRun.current = ''; const abort = new AbortController(); controller.current = abort; try {
         const result = await cp5Api.runAgent(workspaceId, await token(), selected, goal, text => setDelta(value => value + text), abort.signal, (type, data) => { if (!data || typeof data !== 'object')
             return; if (type === 'status' && 'runId' in data && typeof data.runId === 'string') {
             activeRun.current = data.runId;
@@ -96,6 +96,7 @@ function AgentsBody({ workspace }: {
         setNotice(`Execution ${result.status}.`);
     }
     catch (e) {
+        setNotice('');
         setError(abort.signal.aborted ? 'Execution stream stopped. Refresh persisted status to confirm cancellation.' : aiError(e));
     }
     finally {

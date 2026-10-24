@@ -88,6 +88,33 @@ export async function fixtureAgentTerminalSmoke(tab){
   assert.equal(new URL(await tab.url()).hash,run,'Refresh restored the wrong run');
   return {provider:'MOCKED',journey:'step bound → cancellation → correct refresh recovery',result:'passed'};
 }
+// Both tabs use the genuine signed-in browser and normal API. No provider
+// completion is requested: a soft-deleted definition must fail before execution.
+export async function failedAgentStartSmoke(tab, staleTab, model){
+  const originalURL=await tab.url(), name=`Browser failed-start recovery ${Date.now()}`;
+  await tab.playwright.getByLabel('Saved agent',{exact:false}).selectOption('');
+  await tab.playwright.getByLabel('Name',{exact:true}).fill(name);
+  await tab.playwright.locator('#ai-model').selectOption(model);
+  await tab.playwright.getByRole('button',{name:'Save configuration',exact:true}).click();
+  await tab.playwright.getByText('Agent configuration saved. Run uses this saved configuration.',{exact:true}).waitFor({state:'visible',timeoutMs:15000});
+  await staleTab.goto(originalURL);
+  // A hash-only navigation restores a run but does not remount the definitions list.
+  await staleTab.reload();
+  for(let attempt=0;attempt<5;attempt++){
+    try{await staleTab.playwright.getByLabel('Saved agent',{exact:false}).locator('option').filter({hasText:name}).waitFor({state:'attached',timeoutMs:3000});break;}
+    catch{if(attempt===4)throw new Error('Saved test definition did not load in the second tab');}
+  }
+  await staleTab.playwright.getByLabel('Saved agent',{exact:false}).selectOption({label:name});
+  await staleTab.playwright.getByLabel('Goal',{exact:false}).fill('Deleted configuration must not start.');
+  await tab.playwright.getByRole('button',{name:'Delete agent',exact:true}).click();
+  await tab.playwright.getByText('Agent deleted. Existing execution history is retained.',{exact:true}).waitFor({state:'visible',timeoutMs:15000});
+  await staleTab.playwright.getByRole('button',{name:'Run / retry as new execution',exact:true}).click();
+  await staleTab.playwright.getByRole('alert').filter({hasText:'Resource not found.'}).waitFor({state:'visible',timeoutMs:15000});
+  assert.equal(new URL(await staleTab.url()).hash,'','Failed start retained a previous run identity');
+  assert.equal(await staleTab.playwright.getByText('Starting foreground execution…',{exact:true}).count(),0,'Failed start retained a running notice');
+  assert.equal(await staleTab.playwright.getByRole('button',{name:'Request cancellation',exact:true}).isEnabled(),false);
+  return {journey:'stale deleted definition → controlled failure → no old run identity or running notice',result:'passed',providerCalls:0};
+}
 export async function onboardingSmoke(tab){
   await tab.goto(base+'/onboarding');
   await tab.playwright.getByRole('button',{name:'Create or select a workspace',exact:true}).click();

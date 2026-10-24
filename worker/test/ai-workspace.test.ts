@@ -142,6 +142,14 @@ describe("AI vertical slice: real local encrypted R2 + D1; mocked OpenRouter, Cl
         expect(reads).not.toHaveBeenCalled();
         expect((await call(`/workspaces/${wa}/ai/conversations`, "POST", { databaseId: tb, model: "test/model" })).status).toBe(404);
     });
+    it("rejects unavailable models before completion or schema access", async () => {
+        const response = await call(`/workspaces/${wa}/ai/conversations`, "POST", { databaseId: ta, model: "unavailable/not-a-model" });
+        expect(response.status).toBe(400);
+        expect(await response.text()).not.toContain(secret);
+        expect(completionCount).toBe(0);
+        expect(reads).not.toHaveBeenCalled();
+        expect(requests.every(request => request.path.endsWith('/models'))).toBe(true);
+    });
     it("persists real API-contract messages, usage and actual selected schema without executing proposed SQL", async () => {
         const id = await create();
         const response = await call(`/workspaces/${wa}/ai/conversations/${id}/messages`, "POST", { content: "Show names" });
@@ -223,6 +231,11 @@ describe("AI vertical slice: real local encrypted R2 + D1; mocked OpenRouter, Cl
     it("revokes credential metadata before disabling encrypted object access", async () => {
         expect((await call("/ai/providers/openrouter", "POST", { action: "revoke" })).status).toBe(200);
         expect((await call("/ai/models")).status).toBe(409);
+        const conversation = await db.prepare('SELECT id FROM ai_conversations WHERE user_id=? LIMIT 1').bind(userA).first<{id:string}>();
+        requests.length = 0;
+        expect((await call(`/workspaces/${wa}/ai/conversations/${conversation!.id}/messages`, 'POST', {content:'Must not reach provider'})).status).toBe(409);
+        expect(requests).toHaveLength(0);
+        expect(reads).not.toHaveBeenCalled();
         expect((await (await call("/ai/providers/openrouter")).json() as {
             data: {
                 configured: boolean;
