@@ -1,375 +1,439 @@
-
-<div align="center">
+ <div align="center">
 
 # SubStrata Engine
 
-### Serverless-First Multi-Tenant EAV Database and AI Orchestration Platform
+### A Serverless, Multi-Tenant Database Workspace with AI-Assisted SQL and Agents
 
-<img src="https://readme-typing-svg.demolab.com?font=JetBrains+Mono&weight=600&size=20&duration=3000&pause=900&color=7C3AED&center=true&vCenter=true&width=680&lines=Natural+language+%E2%86%92+EAV+JSON+%E2%86%92+executable+PostgreSQL;Zero-DDL+schema+evolution%2C+per-tenant%2C+in+real+time;Bring+your+own+key.+Bring+your+own+database." alt="Typing tagline" />
-
-<br/>
-
-<img src="https://img.shields.io/badge/Domain-DBMS_%2F_Agentic_AI-7C3AED?style=for-the-badge&labelColor=0F172A" alt="Domain" />
-<img src="https://img.shields.io/badge/Architecture-Monorepo-06B6D4?style=for-the-badge&labelColor=0F172A" alt="Architecture" />
-<img src="https://img.shields.io/badge/Status-Capstone_Project-F59E0B?style=for-the-badge&labelColor=0F172A" alt="Status" />
+<img src="https://readme-typing-svg.demolab.com?font=JetBrains+Mono&weight=600&size=19&duration=3200&pause=1000&color=7C3AED&center=true&vCenter=true&width=780&lines=Bring+Your+Own+Database.+Bring+Your+Own+AI+Key.;Explore+schemas.+Query+data.+Work+with+AI.;One+workspace.+Multiple+databases.+Controlled+execution." alt="SubStrata Engine tagline" />
 
 <br/>
 
-<img src="https://img.shields.io/badge/Next.js-15-000000?style=flat-square&logo=next.js&logoColor=white" alt="Next.js 15" />
-<img src="https://img.shields.io/badge/React-19-61DAFB?style=flat-square&logo=react&logoColor=black" alt="React 19" />
-<img src="https://img.shields.io/badge/FastAPI-Python_3.11%2F3.14-009688?style=flat-square&logo=fastapi&logoColor=white" alt="FastAPI" />
-<img src="https://img.shields.io/badge/PostgreSQL-16-4169E1?style=flat-square&logo=postgresql&logoColor=white" alt="PostgreSQL 16" />
-<img src="https://img.shields.io/badge/asyncpg-async_driver-336791?style=flat-square" alt="asyncpg" />
-<img src="https://img.shields.io/badge/Tailwind-Cyberpunk_Theme-06B6D4?style=flat-square&logo=tailwindcss&logoColor=white" alt="Tailwind CSS" />
-<img src="https://img.shields.io/badge/license-Owner--Licensed-64748B?style=flat-square" alt="Owner-Licensed" />
+![Domain](https://img.shields.io/badge/Domain-DBMS_%2F_Agentic_AI-7C3AED?style=for-the-badge&labelColor=0F172A)
+![Architecture](https://img.shields.io/badge/Architecture-Serverless_Monorepo-06B6D4?style=for-the-badge&labelColor=0F172A)
+![Status](https://img.shields.io/badge/Status-Local_MVP_Validated-F59E0B?style=for-the-badge&labelColor=0F172A)
+
+<br/>
+
+![Next.js](https://img.shields.io/badge/Next.js-16-000000?style=flat-square&logo=next.js&logoColor=white)
+![React](https://img.shields.io/badge/React-19-61DAFB?style=flat-square&logo=react&logoColor=black)
+![TypeScript](https://img.shields.io/badge/TypeScript-Backend_%26_Frontend-3178C6?style=flat-square&logo=typescript&logoColor=white)
+![Cloudflare](https://img.shields.io/badge/Cloudflare-Workers_%2F_D1_%2F_R2-F38020?style=flat-square&logo=cloudflare&logoColor=white)
+![PostgreSQL](https://img.shields.io/badge/PostgreSQL-Supported-4169E1?style=flat-square&logo=postgresql&logoColor=white)
+![OpenRouter](https://img.shields.io/badge/AI-OpenRouter_BYOK-7C3AED?style=flat-square)
+![License](https://img.shields.io/badge/License-Proprietary-64748B?style=flat-square)
+
+**[Live Deployment — Coming Soon](https://example.com/replace-with-substrata-staging-url)** · [Source Code](https://github.com/Adityaraj-Gupta-JI/SubStrata-Engine) · [Discussions](https://github.com/Adityaraj-Gupta-JI/SubStrata-Engine/discussions) · [Releases](https://github.com/Adityaraj-Gupta-JI/SubStrata-Engine/releases)
+
+<sub>Deployment URL is a placeholder until the isolated Cloudflare environment passes hosted acceptance.</sub>
 
 </div>
 
-<img src="https://raw.githubusercontent.com/andreasbm/readme/master/assets/lines/rainbow.png" width="100%" alt="" />
-
-
-<div align="center">
-<sub>📌 <a href="#-overview">Overview</a> · <a href="#-the-problem">Problem</a> · <a href="#-competitor-benchmark">Benchmark</a> · <a href="#%EF%B8%8F-system-architecture">Architecture</a> · <a href="#-tech-stack">Stack</a> · <a href="#-quick-start">Quick Start</a> · <a href="#-team">Team</a></sub>
-</div>
-
---- 
+---
 
 ## 📌 Overview
 
-**SubStrata Engine** is a serverless-first, multi-tenant database orchestration platform that parses natural-language queries into structured **Entity-Attribute-Value (EAV)** JSON models and executes them as valid PostgreSQL SQL. It sits between non-deterministic LLM reasoning and deterministic relational persistence — enabling schema evolution without a single `ALTER TABLE`.
+**SubStrata Engine** is a serverless-first, multi-tenant platform for exploring, querying and managing database connections through a unified web interface.
 
-It runs a dual **BYOK** (Bring-Your-Own-Key) and **BYODB** (Bring-Your-Own-Database) hybrid model: users supply their own OpenRouter credentials and choose between SubStrata's managed Postgres cluster or their own external database (Supabase, Neon, AWS RDS) — giving full data sovereignty with zero-configuration onboarding.
+It combines conventional database tools with AI-assisted workflows while keeping database operations subject to explicit authorization and execution controls.
 
-### Overview Flow
+Two principles define the platform:
 
-```mermaid
-flowchart LR
-    U[Natural Language Interface] --> A[SubStrata Agentic Engine]
-    K[BYOK OpenRouter Gateway] --> A
-    A --> P[Schema & EAV Parsing Pipeline]
-    P --> R{Database Route}
-    R --> M[Managed PostgreSQL<br/>Multi-Tenant Database]
-    R --> B[BYODB Database<br/>Supabase / Neon / AWS RDS]
-```
+- **BYODB — Bring Your Own Database:** Connect an existing supported database instead of being required to migrate its data into a new platform.
+- **BYOK — Bring Your Own Key:** Configure a personal OpenRouter API key and choose an available AI model rather than relying on a single platform-owned model credential.
 
----
+SubStrata brings together database exploration, SQL editing, AI chat, saved conversations, configurable agents and workspace management.
 
-## 🎯 The Problem
+**Current maturity:** The core read-only MVP has passed local browser acceptance with genuine Clerk authentication, PostgreSQL execution and OpenRouter requests. Hosted deployment and production-readiness validation remain separate milestones.
 
-Modern SaaS applications hit four structural bottlenecks when handling polymorphic user data:
+## 🎯 Problem Statement
 
-- **Schema rigidity** — traditional RDBMS require explicit `ALTER TABLE` operations for new attributes, causing lockups and downtime at scale.
-- **Tenant isolation overhead** — dedicated database instances per tenant are cost-prohibitive; shared multi-tenant tables risk cross-tenant data leaks.
-- **Vendor lock-in & LLM cost explosion** — centralized AI platforms force fixed pricing and hardcoded model choices, leading to credit depletion and privacy non-compliance.
-- **Data sovereignty violations** — enterprise users won't store proprietary relational data in third-party-hosted DB SaaS without explicit control.
+Database administration and AI-assisted data exploration often involve several disconnected tools:
 
-Existing tooling forces a trade-off between **static rigidity** (traditional RDBMS, DB admin UIs) and **non-deterministic insecurity** (raw text-to-SQL generators, which produce invalid queries and offer no live inspection layer).
+- Database clients for inspecting tables and executing SQL.
+- Cloud dashboards for managing database connections.
+- Separate AI applications for explaining schemas or generating queries.
+- Manual processes for reviewing permissions and tracking activity.
 
-## 💡 The Solution
+Integrating these tools introduces additional configuration, context switching and security concerns. AI-generated SQL creates another challenge: a useful suggestion should not automatically become an authorized database operation.
 
-SubStrata resolves this with three mechanisms:
+## 💡 Proposed Solution
 
-- ** Dynamic EAV persistence pipeline ** — entity schemas stored via normalized `entities` / `attributes` / `entity_values` tables, eliminating runtime migrations.
-- ** Strict tenant scoping ** — every natural-language query and SQL execution is bound to an immutable `tenant_id` context.
-- ** BYOK + BYODB federated runtime ** — users supply OpenRouter credentials and pick between SubStrata's managed instance or their own external database.
+SubStrata provides a single workspace where authenticated users can:
 
-It functions as **a deterministic execution boundary around LLM output** — the model reasons freely, but nothing reaches Postgres without passing through validation, tenant scoping, and SSRF checks.
+1. Select an authorized workspace and database.
+2. Explore schemas, tables, columns and relationships.
+3. Inspect permitted records and execute read-only SQL.
+4. Configure their own OpenRouter credentials.
+5. Generate SQL proposals using database-aware AI assistance.
+6. Review and explicitly execute permitted queries.
+7. Run bounded AI agents and inspect execution traces.
+8. Manage workspace access according to assigned permissions.
 
-## 🔄 Solution Flow
+The application separates **AI reasoning**, **authorization** and **database execution**. Generated output is advisory until the user takes an allowed action.
 
-```mermaid
-flowchart LR
-    U[User / Natural Language] --> A[SubStrata Agentic Engine]
-    A --> P[EAV Parsing + SQL Extraction]
-    P --> V[Validation + Tenant Scope + SSRF Checks]
-    V --> R{Database Route}
-    R --> M[Managed PostgreSQL]
-    R --> B[BYODB]
-    M --> O[Result]
-    B --> O
-    O --> I[Live EAV Inspector]
-```
+## ✨ Core Capabilities
 
----
+| Capability | Current implementation |
+|---|---|
+| Authentication | Clerk-based sign-in, session verification and protected routes |
+| Workspaces | Workspace selection, membership roles and access controls |
+| Database connectivity | BYODB PostgreSQL and constrained MySQL support |
+| Database explorer | Schema, table, column, key and relationship inspection |
+| SQL workspace | SQL editor, read-only query execution and result viewing |
+| AI configuration | OpenRouter BYOK, encrypted credential storage and model selection |
+| AI chat | Streaming responses, saved conversations, cancellation and recovery |
+| AI SQL assistance | Schema-aware SQL proposals with editable editor handoff |
+| AI agents | Schema Analyst, Query Assistant and Data Explorer |
+| Agent observability | Bounded execution, step traces, history and cancellation |
+| Activity | Persisted workspace and execution-related activity |
+| Managed database integration | Neon integration present; provisioning remains disabled pending configuration and approval |
 
-## 🏆 Competitor Benchmark
+### AI agents
 
-<table>
-<tr><th>Capability</th><th>Traditional RDBMS<br/>(PostgreSQL)</th><th>DB Admin UI<br/>(Retool / Supabase Studio)</th><th>Raw LLM Text-to-SQL</th><th>SubStrata Engine</th></tr>
-<tr><td><b>Dynamic schema expansion</b></td><td>❌ DDL locks required</td><td>❌ Manual DDL editing</td><td>❌ Generates static SQL</td><td>✅ Zero-DDL EAV pipeline</td></tr>
-<tr><td><b>BYOK (model choice)</b></td><td>❌ N/A</td><td>❌ N/A</td><td>❌ Fixed model backend</td><td>✅ Dynamic OpenRouter routing</td></tr>
-<tr><td><b>BYODB (database choice)</b></td><td>❌ Fixed host</td><td>⚠️ Complex config</td><td>❌ No native execution</td><td>✅ Dual-track: Managed vs BYODB</td></tr>
-<tr><td><b>Multi-tenant isolation</b></td><td>⚠️ Manual RLS rules</td><td>⚠️ Manual filtering</td><td>❌ High hallucination risk</td><td>✅ Programmatic tenant scope</td></tr>
-<tr><td><b>Live visual EAV inspector</b></td><td>❌ Relational viewer only</td><td>❌ Relational viewer only</td><td>❌ Terminal text only</td><td>✅ Live inspector table</td></tr>
-</table>
+| Agent | Purpose |
+|---|---|
+| **Schema Analyst** | Examine database structure, columns, keys and relationships |
+| **Query Assistant** | Assist with SQL generation and query understanding |
+| **Data Explorer** | Explore authorized data through bounded, permission-controlled tools |
 
-## ⚡ Novelty & Technical Innovation
-
-<table>
-<tr><td width="50%" valign="top">
-
-#### 🧩 Deterministic EAV Parsing Layer
-Transforms arbitrary natural-language input into structured EAV JSON before translating it into execution-safe PostgreSQL — the LLM never talks to the database directly.
-
-</td><td width="50%" valign="top">
-
-#### 🔀 Federated Execution Engine
-Hot-swaps target async database drivers (`asyncpg`) at request time without requiring an application container restart.
-
-</td></tr>
-<tr><td width="50%" valign="top">
-
-#### 🛡️ SSRF Guardrail Isolation
-Network sanitization blocks internal endpoints (`127.0.0.1`, AWS metadata endpoints) when a user-supplied BYODB connection string is used.
-
-</td><td width="50%" valign="top">
-
-#### ♾️ Zero-DDL Attribute Mutation
-Infinite attributes can be attached to entities dynamically, per tenant, without table lockups.
-
-</td></tr>
-</table>
-
----
+Agent actions are subject to backend permissions and execution limits. Model output is not treated as an independent authorization source.
 
 ## 🏗️ System Architecture
 
 ```mermaid
-flowchart LR
-    F[Frontend<br/>Next.js 15 + React 19]
-    G[FastAPI<br/>API Gateway]
-    A[Agentic Layer<br/>OpenRouter + EAV/SQL]
-    E[Execution<br/>SSRF + SQL Checks]
-    D[(PostgreSQL<br/>EAV)]
-    F --> G --> A --> E --> D
+flowchart TB
+    U["User / Browser"]
+    F["Next.js 16 + React Frontend"]
+    A["Cloudflare API Worker"]
+    C["Clerk Authentication"]
+    D["Cloudflare D1: Metadata and Access"]
+    R["Cloudflare R2: Encrypted Credential Objects"]
+    AI["OpenRouter: User-Selected AI Models"]
+    E["Authorized Database Execution"]
+    PG[("PostgreSQL / BYODB")]
+    MY[("MySQL / BYODB")]
+    N["Neon Managed Integration"]
+
+    U --> F
+    F --> A
+    A --> C
+    A --> D
+    A --> R
+    A --> AI
+    A --> E
+    E --> PG
+    E --> MY
+    A -. "Provisioning gated" .-> N
 ```
 
-| Layer | Key Components | Responsibility |
+### Architecture responsibilities
+
+| Layer | Technology | Responsibility |
 |---|---|---|
-| **Frontend** | Next.js 15, React 19 | Key management, model selection, query terminal, live EAV inspection |
-| **Gateway** | FastAPI | Router handling, tenant ID injection and header extraction |
-| **Agentic** | OpenRouter | Prompt generation, model querying, EAV JSON and SQL extraction |
-| **Execution** | SSRF checks, `asyncpg` | Security verification, forbidden-statement checks and database routing |
-| **Persistence** | PostgreSQL | `entities`, `attributes`, and `entity_values` persistence |
+| Frontend | Next.js 16, React, TypeScript, Tailwind CSS | Application UI, navigation, editor, explorer, chat and agents |
+| API | Cloudflare Workers, TypeScript | Authenticated routes, authorization, orchestration and execution boundaries |
+| Identity | Clerk | User authentication and session verification |
+| Control plane | Cloudflare D1 | Users, workspaces, memberships, metadata and audit records |
+| Credential storage | Cloudflare R2 + AES-256-GCM | Encrypted BYOK and database credential storage |
+| AI provider | OpenRouter | Model discovery, inference and streaming responses |
+| Database access | PostgreSQL and constrained MySQL adapters | Authorized schema inspection and query execution |
+| Managed database integration | Neon | Managed PostgreSQL lifecycle integration, subject to provisioning gates |
+| Deployment | Cloudflare Workers + OpenNext | Serverless frontend and API packaging |
 
-### Core Modules
+**Important distinction:** D1 is the application's control-plane database. User-connected PostgreSQL/MySQL databases are separate data sources. R2 stores encrypted credential objects; encryption keys remain in backend secret configuration.
 
-| Module | Responsibility |
-|---|---|
-| `app.routers.api` | Orchestrates key verification, model choice, dynamic prompt generation, and chat endpoints |
-| `app.tools.db_tools` | Executes sanitized SQL, enforces forbidden-statement checks (`DROP DATABASE`, `TRUNCATE`), manages tenant filters |
-| `app.database.connection` | Async session factories, connection pooling, `.env` parsing |
-| `frontend/src/app/page.tsx` | Single-page dashboard — key management, model selection, query terminal, live DB inspection |
-
-### Runtime Paths
-
-| Mode | User Provides | Destination |
-|---|---|---|
-| **BYOK** | Personal OpenRouter API key | OpenRouter model runtime |
-| **BYODB** | Database connection string | User's external database |
-| **Managed SaaS** | Managed option | SubStrata multi-tenant PostgreSQL |
-
-### Request Sequence
+### AI-assisted SQL workflow
 
 ```mermaid
 sequenceDiagram
-    participant U as User
-    participant F as Frontend
-    participant A as FastAPI
-    participant L as OpenRouter
-    participant D as Target DB
+    actor User
+    participant UI as SubStrata Frontend
+    participant API as API Worker
+    participant AI as OpenRouter
+    participant DB as Authorized Database
 
-    U->>F: Natural-language query
-    F->>A: Query + tenant context + API key
-    A->>L: Prompt + tenant boundary
-    L-->>A: EAV JSON + SQL
-    A->>A: Security + validation checks
-    A->>D: Execute via asyncpg
-    D-->>A: Result
-    A-->>F: Parsed output
-    F-->>U: Live EAV Inspector
+    User->>UI: Select workspace and database
+    UI->>API: Request authorized schema context
+    API->>DB: Inspect permitted metadata
+    DB-->>API: Schema information
+    API-->>UI: Authorized context
+    User->>UI: Describe the desired query
+    UI->>API: Request SQL assistance
+    API->>AI: Context and instructions
+    AI-->>API: SQL proposal
+    API-->>UI: Proposed SQL
+    User->>UI: Review and open SQL editor
+    Note over UI,DB: No automatic SQL execution
+    User->>UI: Explicitly execute permitted SELECT
+    UI->>API: SQL execution request
+    API->>DB: Authorized read-only query
+    DB-->>API: Query result
+    API-->>UI: Rows and metadata
 ```
 
-## 🛠️ Tech Stack
+## 🛡️ Security and Isolation
 
-| Layer | Technology |
+SubStrata uses multiple controls rather than relying on AI-generated instructions for database safety.
+
+- **Authenticated requests:** API access is associated with verified Clerk sessions.
+- **Workspace authorization:** Membership and permissions are enforced through backend-controlled workspace records.
+- **Tenant isolation:** Database connections, conversations and agent operations are scoped to authorized workspaces.
+- **Encrypted credentials:** BYOK credentials are encrypted before persistence; encryption keys are not exposed through the frontend.
+- **Read-only default:** SQL execution is restricted by the applicable database adapter and authorization policy.
+- **Explicit execution:** AI-generated SQL proposals do not run automatically.
+- **Bounded agents:** Agent execution uses tool restrictions, step limits, cancellation and trace records.
+- **Connection validation:** BYODB connections are subject to network and connection security checks.
+
+These controls reduce risk but do not constitute a claim of formal security certification or production penetration testing.
+
+## 🛠️ Technology Stack
+
+| Category | Technologies |
 |---|---|
-| **Frontend framework** | Next.js 15 (Turbopack, React 19 Client Components) |
-| **Styling** | Tailwind CSS — Cyberpunk / Brutalist theme |
-| **Icons** | Lucide React |
-| **State management** | React Hooks (`useState`, `useEffect`, `useRef`) |
-| **Backend framework** | FastAPI (Python 3.11 / 3.14 compatible) |
-| **ASGI server** | Uvicorn (hot-reloading enabled) |
-| **Async DB driver** | `asyncpg` + `psycopg2-binary` |
-| **ORM / query builder** | SQLAlchemy (async extension) |
-| **HTTP client** | `httpx` (async OpenRouter communication) |
-| **Env management** | `python-dotenv` |
-| **Database** | PostgreSQL 16 |
-| **Schema layout** | Entity-Attribute-Value (EAV) standard |
+| Web application | Next.js 16, React 19, TypeScript |
+| Interface | Tailwind CSS, Lucide React |
+| Backend | Cloudflare Workers, TypeScript |
+| Hosting adapter | OpenNext |
+| Authentication | Clerk |
+| Metadata and access | Cloudflare D1 |
+| Credential vault | Cloudflare R2, AES-256-GCM |
+| Relational databases | PostgreSQL, MySQL (limited support) |
+| Managed database provider | Neon |
+| AI orchestration | OpenRouter, provider-backed streaming and bounded tools |
+| Testing | Automated frontend/Worker tests, browser smoke tests, local database fixtures |
+| Tooling | Node.js, npm, Wrangler, Git and GitHub |
 
-**Deployment compatibility:** Cloudflare Pages/Workers · Edge runtimes · Docker containerization
-**Target audience:** Database administrators, DevOps, enterprise system architects, rapid-prototyping developers
+The repository also retains legacy Python/FastAPI material from an earlier architecture. That is not the primary runtime of the current serverless MVP.
 
----
+## 📂 Application Modules
 
-## 🚀 Quick Start
+| Route | Purpose |
+|---|---|
+| `/login`, `/register` | Authentication entry points |
+| `/onboarding` | Initial workspace setup |
+| `/dashboard` | Workspace overview and activity |
+| `/databases` | Database connections and management |
+| `/explorer` | Schema and relationship exploration |
+| `/sql`, `/sql-editor` | SQL workspace and query execution |
+| `/chat` | AI conversations and SQL assistance |
+| `/agents` | Agent configuration, runs and history |
+| `/settings/ai` | BYOK configuration and model selection |
+| `/settings/access` | Workspace membership and access |
+| `/settings/account` | Account settings |
 
-**Prerequisites:** Node.js ≥ 18 · Python ≥ 3.10 · PostgreSQL (local instance or Supabase/Neon cloud URL)
+## 🚀 Local Development
 
-### Step 1 — Database setup
+### Requirements
 
-```sql
-CREATE DATABASE substrata_db;
-\c substrata_db;
+- Node.js and npm compatible with the repository's package manifests.
+- Wrangler / Cloudflare Workers local development support.
+- Clerk development application and credentials.
+- Local D1 and R2 bindings configured for the API Worker.
+- A supported PostgreSQL database for database-query acceptance.
+- Optional MySQL instance for supported BYODB testing.
+- Optional OpenRouter API key, entered by the user through the application.
 
-CREATE TABLE IF NOT EXISTS entities (
-    id SERIAL PRIMARY KEY,
-    tenant_id VARCHAR(50) NOT NULL,
-    name VARCHAR(255) NOT NULL,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-);
+Use the versions and configuration examples committed in the repository as the source of truth.
 
-CREATE TABLE IF NOT EXISTS attributes (
-    id SERIAL PRIMARY KEY,
-    name VARCHAR(255) UNIQUE NOT NULL
-);
-
-CREATE TABLE IF NOT EXISTS entity_values (
-    id SERIAL PRIMARY KEY,
-    entity_id INT REFERENCES entities(id) ON DELETE CASCADE,
-    attribute_id INT REFERENCES attributes(id) ON DELETE CASCADE,
-    value_text TEXT NOT NULL
-);
-```
-
-### Step 2 — Backend configuration
+### 1. Clone the repository
 
 ```bash
-cd backend
-python -m venv venv
-
-# Windows
-.\venv\Scripts\activate
-# Linux/macOS
-source venv/bin/activate
-
-pip install -r requirements.txt
+git clone --branch dev/substrata-v2 https://github.com/Adityaraj-Gupta-JI/SubStrata-Engine.git
+cd SubStrata-Engine
 ```
 
-Create `.env` in `/backend`:
+### 2. Install dependencies
 
-```env
-DATABASE_URL=postgresql+asyncpg://postgres:YOUR_PASSWORD@localhost:5432/substrata_db
-```
+From the repository root:
 
 ```bash
-uvicorn app.main:app --reload --port 8000
-```
+cd worker
+npm install
 
-### Step 3 — Frontend configuration
-
-```bash
 cd ../frontend
 npm install
+```
+
+### 3. Configure the local environment
+
+Configure the frontend's Clerk publishable key and local API URL using the repository's existing frontend environment convention.
+
+The frontend needs:
+
+```dotenv
+NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY=YOUR_CLERK_PUBLISHABLE_KEY
+NEXT_PUBLIC_PLATFORM_API_URL=http://localhost:8787
+```
+
+Configure the API Worker through its private `worker/.dev.vars` file and the relevant Wrangler bindings.
+
+The API requires appropriate Clerk settings and local D1/R2 configuration. AI credential storage additionally requires:
+
+- `AI_VAULT_KEY_ID` — active encryption key identifier.
+- `AI_VAULT_KEYS` — private JSON keyring containing a matching 32-byte encryption key encoded as 64 hexadecimal characters.
+- `TENANT_CREDENTIALS` — configured R2 binding.
+
+**Never commit `.dev.vars`, real API keys, database passwords, session tokens or encryption keys.**
+
+An OpenRouter provider key is **not** a global backend environment variable. Each user supplies their own credential through `/settings/ai`.
+
+### 4. Prepare local metadata storage
+
+Apply the repository's existing D1 migrations using the local Wrangler configuration. Use the documented migration scripts and environment settings for the current branch.
+
+Do not apply migrations to remote resources during local setup.
+
+### 5. Start the API
+
+In one terminal:
+
+```bash
+cd worker
 npm run dev
 ```
 
-Open **http://localhost:3000** (or `:3001`).
+The normal local API is expected at `http://localhost:8787` when using the established development configuration.
 
-### Step 4 — System usage
+### 6. Start the frontend
 
-```console
-1. Paste your OpenRouter API Key into the top header bar → click SAVE
-2. Select a target model (e.g. Mistral Small 24B [FREE] or Qwen 2.5 72B)
-3. Select your active Tenant Isolation Context (TENANT_ALPHA, TENANT_BETA)
-4. Type a query in the Query Terminal:
+In another terminal:
 
-   > Create entity Laptop with price = 1200 and ram = 16GB
-
-5. Review the parsed EAV/SQL output → click EXECUTE ON DB
-6. Watch the change land in the Live DB Inspector panel
+```bash
+cd frontend
+npm run dev
 ```
 
----
+Open `http://localhost:3000`.
 
-## ⚠️ Known Limitations
+### 7. Use the application
 
+1. Sign in through Clerk and select or create an authorized workspace.
+2. Connect a supported database or select an available configured database.
+3. Inspect tables, columns and relationships in Explorer.
+4. Execute a permitted read-only SQL query.
+5. Open **Settings → AI** and enter your OpenRouter API key.
+6. Validate and save the credential using encrypted storage.
+7. Choose an available compatible model.
+8. Use Chat to request a SQL proposal.
+9. Review the proposal and explicitly execute it in the SQL editor if appropriate.
+10. Explore the three agent templates and inspect their traces.
 
-- Text-to-SQL parsing depends on the selected OpenRouter model's reasoning quality; free-tier models may need stricter prompt guardrails.
-- BYODB mode is only as secure as the SSRF checks cover — connection strings pointing at non-standard internal ranges should be reviewed before production use.
+Some functions require external provider accounts, credentials or owner-side configuration.
+
+## 🧪 Validation and Testing
+
+The October 2026 local acceptance cycle exercised:
+
+- Genuine Clerk authentication, workspace access and logout.
+- PostgreSQL schema exploration and read-only SQL execution.
+- Encrypted OpenRouter credential validation and persistence.
+- Real model discovery and streaming chat.
+- Database-aware SQL proposals and explicit SQL execution.
+- All three AI agent templates with real provider responses.
+- Chat and agent cancellation.
+- Conversation/run restoration after refresh.
+- Membership mutations and authorization checks.
+
+Automated tests, typechecks, linting, production builds and Cloudflare packaging checks were also performed.
+
+**Scope:** These results support the tested local MVP. They do not establish hosted production availability, comprehensive load testing or support for every provider/database configuration.
+
+## ⚠️ Current Limitations
+
+- The new isolated Cloudflare staging deployment is pending.
+- Managed Neon provisioning remains disabled until separately configured and approved.
+- Database writes are not part of the currently accepted read-only release scope.
+- MySQL support is more constrained than PostgreSQL; write and view-management capabilities are not available through the current MySQL adapter.
+- OpenRouter model capabilities, quotas, pricing and availability vary by provider and account.
+- AI-generated SQL and summaries require review; they are not guaranteed correct.
+- Agent data previews are bounded and must not be interpreted as complete table scans.
+- Production load, disaster recovery and operational monitoring require additional validation.
 
 ## 🗺️ Roadmap
 
-- [ ] **Web services integration** — WebGL and 3D schema topology visualization
-- [ ] **Edge execution** — full deployment to Cloudflare Workers with Hyperdrive DB routing
-- [ ] **Vector search EAV hybrid** — `pgvector` integration for semantic querying over entity values
-- [ ] **Auto-migration utility** — one-click conversion of standard relational schemas into SubStrata EAV structures
+The roadmap distinguishes delivered local functionality from planned expansion.
 
----
-
-## 👥 Team
-
-| Member | Role | Primary Contribution |
+| Phase | Focus | Status |
 |---|---|---|
-| **Adityaraj Gupta** | **Backend Systems & Database Infrastructure Engineer** | Designed and implemented the backend services, PostgreSQL EAV persistence layer, asynchronous database runtime, and database connectivity workflow. |
-| **A. N. Yashas Kiran** | **Frontend Architecture & User Experience Engineer** | Designed and implemented the frontend dashboard, query-terminal experience, model-selection interface, and live EAV inspection workflow. |
-| **Krishna Agrawal** | **Full-Stack Integration & AI Systems Engineer** | Integrated the frontend, backend, OpenRouter-based agentic workflow, tenant context, SQL execution path, and database routing components. |
+| MVP / Release Candidate | Workspaces, database explorer, SQL, BYOK chat, agents | Local acceptance completed |
+| Hosted Staging | Isolated Cloudflare resources, hosted browser acceptance | Planned |
+| UX Improvements | Responsive refinements, theme controls, accessibility | Planned |
+| Product Management | Subscription and plan visualization, account usage | Planned |
+| Documentation | BRD, PRD, SRS, technical architecture and user guides | Planned |
+| Advanced Database Operations | Expanded controlled editing, provisioning and database support | Future, gated |
+| Advanced Visualization | Richer schema graphs, execution visualizations and relationship exploration | Future |
+| Extended Intelligence | More advanced agent workflows and optional semantic/vector capabilities | Exploratory |
 
-## 📚 Technical References
+Potential future capabilities are not represented as available in the current MVP.
 
-The following references provide the official documentation or scholarly background for the technologies, services, and data-modeling approach identified in this project. They are included for technical context and implementation reference; the project’s architecture and feature descriptions remain specific to SubStrata Engine.
+## 📦 Releases and Deployment
 
-1. [Next.js Documentation][1] — framework documentation for the Next.js application layer.
-2. [FastAPI Documentation][2] — framework documentation for the Python API layer.
-3. [PostgreSQL 16 Documentation][3] — database documentation for the PostgreSQL persistence layer.
-4. [SQLAlchemy Documentation][4] — documentation for the ORM and query-builder layer, including asynchronous support.
-5. [Tailwind CSS Documentation][5] — styling and utility-class documentation.
-6. [Lucide Documentation][6] — documentation for the icon library used by the frontend.
-7. [OpenRouter Documentation][7] — API and model-routing documentation for the BYOK integration.
-8. [Guidelines for the Effective Use of Entity-Attribute-Value Modeling for Biomedical Databases][8] — scholarly reference discussing appropriate use and implementation considerations for EAV modeling.
+**Current state:** Locally validated release candidate. The new hosted deployment has not yet passed staging acceptance.
+
+- [Release history](https://github.com/Adityaraj-Gupta-JI/SubStrata-Engine/releases)
+- [Development branch](https://github.com/Adityaraj-Gupta-JI/SubStrata-Engine/tree/dev/substrata-v2)
+- [Deployment — URL pending](https://example.com/replace-with-substrata-staging-url)
+
+The staging architecture uses separate frontend and API Workers, D1 metadata storage, private R2 credential storage and dedicated authentication configuration.
+
+Deployment requires a clean release build, verified cloud resources, protected secrets and hosted acceptance. Local development secrets must not be bundled into deployable frontend artifacts.
+
+## 👥 Team and Contributions
+
+| Contributor | Project role |
+|---|---|
+| **Adityaraj Gupta** | Backend systems and database infrastructure |
+| **A. N. Yashas Kiran** | Frontend architecture and user experience |
+| **Krishna Agrawal** | Full-stack integration and AI systems |
+
+The roles above reflect the project team's documented responsibilities. Individual contributions and implementation history can be reviewed through repository commits.
+
+**Project repository:** [Adityaraj-Gupta-JI/SubStrata-Engine](https://github.com/Adityaraj-Gupta-JI/SubStrata-Engine)
+
+## 📚 Documentation and References
+
+Project documentation is maintained in the repository's `docs/` directory. More complete business requirements, product requirements, software requirements, architecture and operational documentation are planned.
+
+Technical references:
+
+- [Next.js](https://nextjs.org/docs)
+- [Cloudflare Workers](https://developers.cloudflare.com/workers/)
+- [Cloudflare D1](https://developers.cloudflare.com/d1/)
+- [Cloudflare R2](https://developers.cloudflare.com/r2/)
+- [Clerk](https://clerk.com/docs)
+- [PostgreSQL](https://www.postgresql.org/docs/)
+- [MySQL](https://dev.mysql.com/doc/)
+- [OpenRouter](https://openrouter.ai/docs)
+- [Neon](https://neon.com/docs)
+
+## 💬 Discussions and Feedback
+
+Use [GitHub Discussions](https://github.com/Adityaraj-Gupta-JI/SubStrata-Engine/discussions) for technical questions, architecture discussions, ideas and feedback.
+
+Please avoid posting credentials, database connection strings or sensitive records in public discussions or issues.
+
+## 📄 License and Ownership
+
+**SubStrata Engine is proprietary, owner-licensed project material. All rights reserved.**
+
+Public repository visibility does not itself grant permission to copy, redistribute, modify, commercialize or create derivative works from the project's original source code and documentation.
+
+Third-party dependencies remain subject to their respective licenses and terms. Refer to the repository's `LICENSE` file for the applicable licensing text.
 
 ## 🙏 Acknowledgments
 
-The SubStrata Engine team gratefully acknowledges the open-source ecosystem and technical communities whose software, documentation, and engineering practices supported this project. The project builds on the work of the Next.js, React, FastAPI, PostgreSQL, SQLAlchemy, Tailwind CSS, Lucide, and asyncpg communities, as well as the OpenRouter service used for model access and routing.
+The team acknowledges the maintainers and communities behind the frameworks, database systems, cloud services and development tools used in this project.
 
-We also acknowledge the researchers and database practitioners whose work on Entity-Attribute-Value modeling provides useful context for designing systems that manage sparse, heterogeneous, and evolving data. Their published guidance helped inform the project’s use of an EAV-oriented persistence layout and the importance of considering metadata and implementation complexity when applying the model.
+SubStrata Engine is an independent academic and engineering project. References to third-party technologies do not imply their endorsement.
 
-The team further recognizes the value of official documentation, open-source licensing, community-maintained examples, and the broader developer community. These resources supported the project’s learning, implementation, integration, testing, and documentation activities.
+---
 
-This acknowledgment does not imply endorsement of SubStrata Engine by any referenced project, organization, service, author, or research group.
+<div align="center">
 
-## 📄 License
+**SubStrata Engine**
 
-SubStrata Engine is proprietary project material and is licensed to its owner. Copyright, ownership, and all rights not expressly granted in writing remain with the owner of the project.
+*Bring your database. Bring your model. Keep execution under control.*
 
-Unless the owner provides prior written permission, no person or organization may copy, reproduce, modify, adapt, publish, distribute, sublicense, sell, lease, commercialize, or create derivative works from the project’s source code, documentation, architecture, interface design, database design, branding, or other original materials.
+<img src="https://capsule-render.vercel.app/api?type=waving&color=0:06B6D4,50:7C3AED,100:0F172A&height=110&section=footer" width="100%" alt="" />
 
-Access to, viewing of, or reference to this repository does not transfer ownership or grant an automatic license to use the project. Any permitted use must remain within the scope defined by the owner and must preserve all applicable ownership notices and attribution requirements.
-
-Third-party frameworks, libraries, services, icons, documentation, and other external resources used by the project remain subject to their respective owners’ licenses and terms. This owner license applies only to the original SubStrata Engine materials and does not replace or override the license of any third-party dependency.
-
-The project is provided for its stated development and academic purposes. It is provided **“as is”**, without warranties or guarantees unless otherwise agreed in writing. The owner is not responsible for unauthorized use, redistribution, modification, deployment, or claims arising from use of the project outside the permission granted by the owner.
-
-For permission requests, redistribution rights, commercial usage, academic reuse beyond ordinary reference, or other licensing arrangements, contact the project owner directly.
-
-## 📌 Ownership Notice
-
-SubStrata Engine, including its project-specific documentation, architecture, implementation, and original materials, remains the property of its owner. Third-party frameworks, libraries, services, and reference materials remain subject to their respective licenses and ownership terms.
-
-## Conclusion
-
-SubStrata Engine blends agentic AI with strict relational boundaries and federated cloud storage choice — showing that speed, flexibility, and data control can coexist in modern database architecture.
-
-> *"The future of persistent systems lies not in rigid schemas or unpredictable models, but in deterministic execution boundaries that make dynamic intelligence foundational."*
-> — **SubStrata Core Engineering Team**
-
-<img src="https://capsule-render.vercel.app/api?type=waving&color=0:06B6D4,50:7C3AED,100:0F172A&height=120&section=footer" width="100%" alt="" />
-
-[1]: https://nextjs.org/docs "Next.js Documentation"
-[2]: https://fastapi.tiangolo.com/ "FastAPI Documentation"
-[3]: https://www.postgresql.org/docs/16/ "PostgreSQL 16 Documentation"
-[4]: https://docs.sqlalchemy.org/ "SQLAlchemy Documentation"
-[5]: https://tailwindcss.com/docs "Tailwind CSS Documentation"
-[6]: https://lucide.dev/guide/ "Lucide Documentation"
-[7]: https://openrouter.ai/docs "OpenRouter Documentation"
-[8]: https://pmc.ncbi.nlm.nih.gov/articles/PMC2110957/ "Guidelines for the Effective Use of Entity-Attribute-Value Modeling for Biomedical Databases"
+</div> 
