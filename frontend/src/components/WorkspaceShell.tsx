@@ -26,6 +26,10 @@ export function WorkspaceShell({ children }: { children: ReactNode }) {
   const [status, setStatus] = useState("Loading session…");
   const [create, setCreate] = useState<"organization" | "workspace" | null>(null);
   const [saving, setSaving] = useState(false);
+  function openWorkspaceNavigation() {
+    setOpen(true);
+    requestAnimationFrame(()=>document.getElementById("workspace-select")?.focus());
+  }
 
   useEffect(() => {
     if (!isLoaded || !isSignedIn) return;
@@ -148,7 +152,7 @@ export function WorkspaceShell({ children }: { children: ReactNode }) {
       </aside>
       <div className="min-w-0 flex-1">
         <div className="hidden items-center justify-between border-b border-[#2a3047] bg-[#0d0e17] px-6 py-4 lg:flex"><span className="text-sm font-bold">Database workspace</span><UserButton /></div>
-        <main id="main-content" className="min-w-0 p-4 md:p-6"><WorkspaceSelectionContext.Provider value={{ workspaceId, databaseId, setDatabaseId, sqlDraft, setSqlDraft }}>{children}</WorkspaceSelectionContext.Provider></main>
+        <main id="main-content" className="min-w-0 p-4 md:p-6"><WorkspaceSelectionContext.Provider value={{ workspaceId, databaseId, setDatabaseId, openWorkspaceNavigation, sqlDraft, setSqlDraft }}>{children}</WorkspaceSelectionContext.Provider></main>
       </div>
     </div>
   );

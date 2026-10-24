@@ -7,7 +7,7 @@ import {ExternalCredentialStore} from "../src/byodb/credentials";
 import {destinationDigest} from "../src/byodb/policy";
 import { randomBytes, randomUUID } from "node:crypto";
 import { spawnSync } from "node:child_process";
-import { readFileSync, mkdtempSync, mkdirSync, rmSync } from "node:fs";
+import { readFileSync, mkdtempSync, mkdirSync, rmSync, copyFileSync, appendFileSync, writeFileSync, existsSync, unlinkSync } from "node:fs";
 import { resolve, join, sep } from "node:path";
 import { Miniflare, convertV4MiniflareOptions } from "miniflare";
 import { createHandler } from "../src/index";
@@ -28,9 +28,13 @@ const password = randomBytes(32).toString("hex");
 const passwords = new Map<string, string>();
 const project = "local-project", branch = "br-local";
 const wa = "11111111-1111-4111-8111-111111111111", wb = "22222222-2222-4222-8222-222222222222";
-const ta = "a".repeat(32), tb = "b".repeat(32);
+const browserWorkspace=process.env.SUBSTRATA_BROWSER_WORKSPACE_ID;
+const ta = browserWorkspace?randomUUID().replaceAll("-",""):"a".repeat(32), tb = browserWorkspace?randomUUID().replaceAll("-",""):"b".repeat(32);
+const browserDir=resolve(".wrangler","cp8b-browser"), browserRuntime=join(browserDir,"runtime.env"), browserSeed=join(browserDir,"seed.sql");
+function browserMetadata(sql:string){writeFileSync(browserSeed,sql);const result=spawnSync(process.execPath,[resolve("node_modules/wrangler/bin/wrangler.js"),"d1","execute","METADATA","--local","--persist-to",".wrangler/r3-local","--file",browserSeed,"--env-file","types.env.example","--json"],{encoding:"utf8",timeout:30000,env:{...process.env,WRANGLER_SEND_METRICS:"false"}});if(result.status!==0)throw new Error("Local browser fixture metadata operation failed.");return result.stdout;}
 const target = (id: string): TenantTarget => ({ database: `ss_t_${id}`, runtimeRole: `ss_r_${id}`, credentialReference: `neon-runtime/${id}` });
 let port: number, ca: string, directory: string, owned = false;
+let browserOwned=false,browserSeeded=false;
 let runtime: Miniflare, db: D1Database, env: Env;
 let handler: ReturnType<typeof createHandler>;
 let transport: PgReadTransport;
@@ -52,6 +56,7 @@ async function call(path: string, method = "GET", body?: object, subject = "owne
 }
 beforeAll(async () => {
   if (!enabled) return;
+  if(browserWorkspace&&existsSync(browserRuntime))throw new Error("Existing private browser fixture must be reviewed before reuse");
   if (!docker(["context", "inspect", "--format", "{{.Endpoints.docker.Host}}"]).startsWith("npipe://")) throw new Error("Local Windows Docker context required.");
   const certificateRoot = resolve(".wrangler", "gateway-certificates");
   mkdirSync(certificateRoot, { recursive: true });
@@ -108,8 +113,31 @@ beforeAll(async () => {
     if (!["owner", "other", "viewer"].includes(subject ?? "")) throw unauthorized();
     return { clerkUserId: subject!, sessionId: "mocked-clerk-test-session" };
   }, { transport });
+  if(browserWorkspace){
+    if(!/^[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}$/.test(browserWorkspace))throw new Error("Invalid browser workspace fixture ID");
+    mkdirSync(browserDir,{recursive:true});
+    if(existsSync(browserRuntime))throw new Error("An existing private browser runtime must be reviewed before starting another fixture");
+    const seeded=browserMetadata(`INSERT INTO managed_tenant_databases(id,workspace_id,organization_id,project_id,branch_id,database_name,runtime_role,credential_reference,state) SELECT '${ta}',w.id,w.organization_id,'${project}','${branch}','ss_t_${ta}','ss_r_${ta}','neon-runtime/${ta}','active' FROM workspaces w JOIN organizations o ON o.id=w.organization_id WHERE w.id='${browserWorkspace}' AND w.slug='cp8b-local' AND o.slug='cp8b-smoke-20261024'; SELECT id FROM managed_tenant_databases WHERE id='${ta}' AND workspace_id='${browserWorkspace}';`);
+    if(!seeded.includes(ta))throw new Error("Create the named disposable CP8B organization/workspace through the real browser first");
+    // Secrets are copied privately for Wrangler, never parsed/displayed by the test.
+    browserSeeded=true;
+    copyFileSync('.dev.vars',browserRuntime);
+    browserOwned=true;
+    copyFileSync(cert,join(browserDir,'ca.crt'));
+    const entries=[ta,tb].map(id=>({reference:`neon-runtime/${id}`,projectId:project,branchId:branch,database:`ss_t_${id}`,user:`ss_r_${id}`,host:'127.0.0.1',port,password:passwords.get(`neon-runtime/${id}`),ca}));
+    appendFileSync(browserRuntime,`\nDATABASE_RUNTIME_MODE=local\nDATABASE_RUNTIME_CONFIG='${JSON.stringify(entries)}'\n`);
+    console.log('CP8B_BROWSER_READY: disposable real TLS PostgreSQL; genuine Clerk required.');
+  }
 }, 60000);
 afterAll(async () => {
+  let cleanupError: unknown;
+  if(browserWorkspace&&browserSeeded){
+    const deadline=Date.now()+60*60*1000;
+    while(browserOwned&&!existsSync(join(browserDir,'stop'))&&Date.now()<deadline)await new Promise(resolve=>setTimeout(resolve,500));
+    try { browserMetadata(`DELETE FROM managed_tenant_databases WHERE id='${ta}' AND workspace_id='${browserWorkspace}';`); } catch(error) { cleanupError=error; }
+    for(const path of [browserRuntime,browserSeed,join(browserDir,'ca.crt')])if(existsSync(path))unlinkSync(path);
+    if(existsSync(join(browserDir,'stop')))unlinkSync(join(browserDir,'stop'));
+  }
   await runtime?.dispose();
   if (owned) {
     if (docker(["inspect", "--format", '{{index .Config.Labels "substrata.checkpoint"}}',container]) !== "cp2-gateway-test") throw new Error("Unexpected container ownership.");
@@ -120,6 +148,7 @@ afterAll(async () => {
     if (!resolve(directory).startsWith(root)) throw new Error("Unexpected certificate directory.");
     rmSync(directory, { recursive: true, force: true });
   }
+  if(cleanupError)throw cleanupError;
 });
 
 describe.runIf(enabled)("gateway with real TLS PostgreSQL + D1 (mocked Clerk identity, no Neon)", () => {

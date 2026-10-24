@@ -6,7 +6,7 @@ import { databaseApi, type DatabaseList, type ResultGrid } from "@/lib/api/datab
 import { platformToken } from "@/lib/api/platform";
 
 export interface SqlDraft {workspaceId:string;databaseId:string;sql:string;conversationId:string;source?:"ai"|"explorer"}
-export const WorkspaceSelectionContext = createContext<{ workspaceId: string; databaseId: string; setDatabaseId: (id: string) => void; sqlDraft:SqlDraft|null;setSqlDraft:(draft:SqlDraft|null)=>void } | null>(null);
+export const WorkspaceSelectionContext = createContext<{ workspaceId: string; databaseId: string; setDatabaseId: (id: string) => void; openWorkspaceNavigation:()=>void; sqlDraft:SqlDraft|null;setSqlDraft:(draft:SqlDraft|null)=>void } | null>(null);
 export function useDatabaseWorkspace() {
   const selection = useContext(WorkspaceSelectionContext);
   if (!selection) throw new Error("Workspace selection is unavailable.");
